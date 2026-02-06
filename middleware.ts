@@ -46,6 +46,16 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith(route)
   );
 
+  // Public routes that should skip all auth logic
+  const publicRoutes = ["/pricing"];
+  const isPublicRoute = publicRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
+
+  if (isPublicRoute) {
+    return supabaseResponse;
+  }
+
   // Auth routes - redirect to dashboard if already logged in
   const authRoutes = ["/login", "/register"];
   const isAuthRoute = authRoutes.some((route) => pathname.startsWith(route));

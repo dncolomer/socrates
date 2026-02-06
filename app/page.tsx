@@ -1,75 +1,70 @@
-import Link from "next/link";
+"use client";
+
+import { useState, useEffect } from "react";
 import { ProblemInput } from "@/components/ProblemInput";
+import { TopicBrowser } from "@/components/TopicBrowser";
+import { Footer } from "@/components/Footer";
+import Link from "next/link";
+import { createBrowserClient } from "@supabase/ssr";
 
 export default function Home() {
+  const [selectedTopic, setSelectedTopic] = useState("");
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    supabase.auth.getUser().then(({ data }) => {
+      setIsLoggedIn(!!data.user);
+    });
+  }, []);
+
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="min-h-screen flex flex-col bg-[#0a0a0a]">
       {/* Header */}
-      <header className="border-b border-neutral-800 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-bold text-white">Socrates</h1>
+      <header className="border-b border-neutral-800/60 px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-20">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <Link href="/" className="text-lg font-semibold text-white tracking-tight hover:text-neutral-300 transition-colors">
+            Socrates
+          </Link>
           <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="text-sm text-neutral-400 hover:text-white transition-colors"
-            >
+            <Link href="/pricing" className="text-sm text-neutral-500 hover:text-white transition-colors">
+              Pricing
+            </Link>
+            <Link href="/dashboard" className="text-sm text-neutral-500 hover:text-white transition-colors">
               Dashboard
             </Link>
-            <Link
-              href="/login"
-              className="px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
-            >
-              Sign In
-            </Link>
+            {isLoggedIn === false && (
+              <Link href="/login" className="px-3.5 py-1.5 text-sm bg-white/10 hover:bg-white/15 text-white rounded-lg transition-colors">
+                Sign In
+              </Link>
+            )}
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
+      {/* Hero */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-16">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-600/20 text-blue-400 mb-6">
-            <SocratesIcon />
-          </div>
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Socratic Sessions
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4 tracking-tight">
+            Think Out Loud
           </h2>
-          <p className="text-neutral-400 max-w-lg mx-auto leading-relaxed">
-            Pick a topic, think out loud, and let Socrates observe your reasoning.
-            When your thinking stalls, you&apos;ll get probing questions to
-            push you deeper &mdash; never answers.
+          <p className="text-neutral-500 max-w-lg mx-auto text-sm leading-relaxed">
+            Pick a topic, start talking through it. Socrates listens for reasoning gaps
+            and asks you the right questions — never gives answers.
           </p>
         </div>
 
-        {/* Problem Input -- handles auth internally */}
-        <ProblemInput />
+        <ProblemInput initialTopic={selectedTopic} />
+
+        <div className="mt-12" />
+
+        <TopicBrowser onSelectTopic={setSelectedTopic} />
       </div>
 
-      {/* Footer */}
-      <footer className="border-t border-neutral-800 px-6 py-4">
-        <div className="max-w-4xl mx-auto text-center text-sm text-neutral-500">
-          Audio is analyzed for reasoning gaps. Sessions are stored securely in
-          the cloud.
-        </div>
-      </footer>
+      <Footer />
     </main>
-  );
-}
-
-function SocratesIcon() {
-  return (
-    <svg
-      className="w-8 h-8"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
   );
 }

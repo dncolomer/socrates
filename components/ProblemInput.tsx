@@ -1,86 +1,89 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createSession, setCurrentSession } from "@/lib/storage";
-import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
+import { createSession } from "@/lib/storage";
 
-export function ProblemInput() {
-  const [problem, setProblem] = useState("");
+interface ProblemInputProps {
+  initialTopic?: string;
+}
+
+export function ProblemInput({ initialTopic }: ProblemInputProps) {
+  const [problem, setProblem] = useState(initialTopic || "");
   const [isLoading, setIsLoading] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [usageError, setUsageError] = useState<string | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        setIsAuthenticated(!!user);
-      } catch {
-        setIsAuthenticated(false);
-      }
-    };
-    checkAuth();
-  }, []);
+  // Sync when parent changes the topic
+  if (initialTopic && initialTopic !== problem && !isLoading) {
+    setProblem(initialTopic);
+  }
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!problem.trim()) return;
+    setIsLoading(true);
+    setUsageError(null);
 
-    if (!isAuthenticated) {
-      router.push("/login");
-      return;
+    // Check usage limits
+    try {
+      const res = await fetch("/api/check-usage");
+      if (res.ok) {
+        const usage = await res.json();
+        if (!usage.allowed) {
+          setUsageError(usage.reason || "Session limit reached.");
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // Allow on network error
     }
 
-    setIsLoading(true);
-
-    const session = createSession(problem.trim());
-    setCurrentSession(session);
-
-    router.push("/session");
+    try {
+      // Create session in Supabase
+      const session = await createSession(problem.trim());
+      // Navigate to session page with DB id
+      router.push(`/session?id=${session.id}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to create session";
+      setUsageError(msg);
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="w-full max-w-2xl mx-auto">
-      <div className="space-y-6">
-        <div>
-          <label
-            htmlFor="problem"
-            className="block text-sm font-medium text-neutral-300 mb-2"
-          >
-            Choose a topic for your session
-          </label>
-          <textarea
-            id="problem"
-            value={problem}
-            onChange={(e) => setProblem(e.target.value)}
-            placeholder="What do you want to think through? A concept, a design decision, a proof, a debugging problem..."
-            className="w-full h-32 px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none transition-colors"
-            disabled={isLoading}
-          />
-        </div>
-
+      <div className="relative">
+        <textarea
+          id="problem"
+          value={problem}
+          onChange={(e) => { setProblem(e.target.value); setUsageError(null); }}
+          placeholder="What do you want to think through?"
+          className="w-full h-24 px-4 py-3.5 pr-32 bg-neutral-900/80 border border-neutral-800 rounded-2xl text-white text-[15px] placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none transition-colors"
+          disabled={isLoading}
+        />
         <button
           onClick={handleStart}
           disabled={!problem.trim() || isLoading}
-          className="w-full py-4 px-6 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+          className="absolute right-2.5 bottom-2.5 px-4 py-2 bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-black text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
         >
           {isLoading ? (
             <LoadingSpinner />
           ) : (
-            <>
-              <MicIcon />
-              Begin Session
-            </>
+            <MicIcon />
           )}
+          {isLoading ? "Starting..." : "Start"}
         </button>
-
-        {isAuthenticated === false && (
-          <p className="text-center text-sm text-amber-400/80">
-            You&apos;ll need to sign in before starting a session.
-          </p>
-        )}
       </div>
+      {usageError && (
+        <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+          {usageError}{" "}
+          <Link href="/pricing" className="underline hover:text-red-300">
+            View plans
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

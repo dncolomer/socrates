@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { AudioRecorder, blobToBase64 } from "@/lib/audio";
 import {
-  getCurrentSession,
-  setCurrentSession,
+  getSession,
+  addProbe,
   addProbeToSession,
   endSession,
   saveSession,
   saveSessionAudio,
+  saveSessionEEG,
   type Session,
   type Probe,
   type ObserverMode,
@@ -17,20 +18,18 @@ import {
 } from "@/lib/storage";
 import { formatTime } from "@/lib/utils";
 import { AudioVisualizer, RecordingIndicator } from "./AudioVisualizer";
-import { ObserverControls } from "./ObserverControls";
-import { ProbeSidebar } from "./ProbeSidebar";
 import { ActiveProbe } from "./ActiveProbe";
-import { BrainStateBar, type BandPowers } from "./BrainStateBar";
-import { EEGWaveView } from "./EEGWaveView";
-import { getMuseManager, isMuseSupported, type MuseManager as MuseManagerType } from "@/lib/muse";
+import { ObserverControls } from "./ObserverControls";
 
-const FREQUENCY_PRESETS: Record<Frequency, { threshold: number; intervalMs: number; cooldownMs: number }> = {
-  rare: { threshold: 0.8, intervalMs: 15000, cooldownMs: 30000 },
-  balanced: { threshold: 0.6, intervalMs: 8000, cooldownMs: 15000 },
-  frequent: { threshold: 0.4, intervalMs: 5000, cooldownMs: 10000 },
+// Configuration
+const ANALYSIS_INTERVALS: Record<Frequency, number> = {
+  rare: 15000,
+  balanced: 8000,
+  frequent: 4000,
 };
+const COOLDOWN_AFTER_PROBE_MS = 15000;
 
-export function SessionView() {
+export function SessionView({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -39,180 +38,223 @@ export function SessionView() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Observer controls
   const [observerMode, setObserverMode] = useState<ObserverMode>("active");
   const [frequency, setFrequency] = useState<Frequency>("balanced");
   const [isMuted, setIsMuted] = useState(false);
-  const [muteEndTime, setMuteEndTime] = useState(0);
+  const [muteRemaining, setMuteRemaining] = useState(0);
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [newProbeId, setNewProbeId] = useState<string | null>(null);
-
+  // Probes
   const [activeProbe, setActiveProbe] = useState<Probe | null>(null);
   const [openingProbeLoading, setOpeningProbeLoading] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
 
+  // Tutor-end dialog
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [endReason, setEndReason] = useState("");
 
-  const [bandPowers, setBandPowers] = useState<BandPowers | null>(null);
-  const [museConnected, setMuseConnected] = useState(false);
-  const [museConnecting, setMuseConnecting] = useState(false);
-  const [museStreaming, setMuseStreaming] = useState(false);
+  // Muse EEG
+  const [museStatus, setMuseStatus] = useState<"disconnected" | "connecting" | "connected" | "streaming">("disconnected");
   const [museError, setMuseError] = useState<string | null>(null);
   const [eegChannelData, setEegChannelData] = useState<Map<string, number[]>>(new Map());
+  const [bandPowers, setBandPowers] = useState<{ delta: number; theta: number; alpha: number; beta: number; gamma: number } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const museClientRef = useRef<any>(null);
+  const eegIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const bandIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const eegBufferRef = useRef<Map<string, number[]>>(new Map());
 
-  const museManagerRef = useRef<MuseManagerType | null>(null);
-
-  const isAnalyzingRef = useRef(false);
-  const lastProbeTimeRef = useRef(0);
-  const elapsedSecondsRef = useRef(0);
-  const observerModeRef = useRef<ObserverMode>("active");
-  const frequencyRef = useRef<Frequency>("balanced");
-  const isMutedRef = useRef(false);
-  const sessionRef = useRef<Session | null>(null);
-  const gapScoresRef = useRef<number[]>([]);
-
+  // Refs for interval callbacks
   const recorderRef = useRef<AudioRecorder | null>(null);
+  const sessionRef = useRef<Session | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const analysisRef = useRef<NodeJS.Timeout | null>(null);
+  const lastProbeTimeRef = useRef(0);
+  const muteTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const observerModeRef = useRef(observerMode);
+  const frequencyRef = useRef(frequency);
+  const isMutedRef = useRef(isMuted);
 
+  // Keep refs in sync
   useEffect(() => { observerModeRef.current = observerMode; }, [observerMode]);
   useEffect(() => { frequencyRef.current = frequency; }, [frequency]);
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
-  useEffect(() => { sessionRef.current = session; }, [session]);
 
+  // Load session on mount from Supabase
   useEffect(() => {
-    const currentSession = getCurrentSession();
-    if (!currentSession) { router.push("/"); return; }
-    setSession(currentSession);
-  }, [router]);
-
-  useEffect(() => {
-    if (isRecording) {
-      timerRef.current = setInterval(() => {
-        setElapsedSeconds((s) => { elapsedSecondsRef.current = s + 1; return s + 1; });
-      }, 1000);
-    } else if (timerRef.current) { clearInterval(timerRef.current); }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isRecording]);
-
-  useEffect(() => {
-    if (isMuted) {
-      const timer = setTimeout(() => { setIsMuted(false); setMuteEndTime(0); }, muteEndTime - Date.now());
-      return () => clearTimeout(timer);
+    let cancelled = false;
+    async function load() {
+      const s = await getSession(sessionId);
+      if (cancelled) return;
+      if (s) {
+        setSession(s);
+        sessionRef.current = s;
+      } else {
+        router.push("/");
+      }
     }
-  }, [isMuted, muteEndTime]);
+    load();
+    return () => { cancelled = true; };
+  }, [sessionId, router]);
 
+  // ---- Muse EEG ----
+  const handleConnectMuse = async () => {
+    handleDisconnectMuse();
+    setMuseStatus("connecting");
+    setMuseError(null);
+    try {
+      const { MuseAthenaClient } = await import("@/lib/muse-athena");
+      const muse = new MuseAthenaClient();
+
+      muse.onEEG((sample: { channels: Record<string, number[]> }) => {
+        for (const [channelName, samples] of Object.entries(sample.channels)) {
+          const existing = eegBufferRef.current.get(channelName) || [];
+          existing.push(...samples);
+          if (existing.length > 512) {
+            eegBufferRef.current.set(channelName, existing.slice(-512));
+          } else {
+            eegBufferRef.current.set(channelName, existing);
+          }
+        }
+      });
+
+      await muse.connect();
+      museClientRef.current = muse;
+      setMuseStatus("connected");
+
+      await muse.startStreaming();
+      setMuseStatus("streaming");
+
+      eegIntervalRef.current = setInterval(() => {
+        setEegChannelData(new Map(eegBufferRef.current));
+      }, 100);
+
+      bandIntervalRef.current = setInterval(() => {
+        const af7 = eegBufferRef.current.get("AF7");
+        const af8 = eegBufferRef.current.get("AF8");
+        if (!af7 || af7.length < 256 || !af8 || af8.length < 256) return;
+        const powers = computeBandPowers(af7.slice(-256), af8.slice(-256));
+        setBandPowers(powers);
+      }, 1000);
+    } catch (err: unknown) {
+      setMuseStatus("disconnected");
+      const error = err as Error;
+      if (error?.name === "NotFoundError" && error?.message?.includes("cancelled")) return;
+      setMuseError(error?.message || "Connection failed.");
+    }
+  };
+
+  const handleDisconnectMuse = () => {
+    if (museClientRef.current) {
+      try { museClientRef.current.disconnect(); } catch {}
+      museClientRef.current = null;
+    }
+    if (eegIntervalRef.current) { clearInterval(eegIntervalRef.current); eegIntervalRef.current = null; }
+    if (bandIntervalRef.current) { clearInterval(bandIntervalRef.current); bandIntervalRef.current = null; }
+    eegBufferRef.current.clear();
+    setEegChannelData(new Map());
+    setBandPowers(null);
+    setMuseStatus("disconnected");
+  };
+
+  // ---- Audio Analysis ----
   const analyzeAudio = useCallback(async () => {
+    const recorder = recorderRef.current;
     const currentSession = sessionRef.current;
-    if (!recorderRef.current || !currentSession || isAnalyzingRef.current) return;
-    if (observerModeRef.current === "off" || isMutedRef.current) return;
 
-    const preset = FREQUENCY_PRESETS[frequencyRef.current];
-    if (Date.now() - lastProbeTimeRef.current < preset.cooldownMs) return;
+    if (!recorder || !currentSession) return;
+    if (observerModeRef.current === "off") return;
+    if (isMutedRef.current) return;
+    if (Date.now() - lastProbeTimeRef.current < COOLDOWN_AFTER_PROBE_MS) return;
 
-    const audioBlob = recorderRef.current.getRecentAudio(30000);
-    if (!audioBlob || audioBlob.size < 1000) return;
+    const recentAudio = recorder.getRecentAudio(15000);
+    if (!recentAudio || recentAudio.size < 1000) return;
 
-    isAnalyzingRef.current = true;
     setIsAnalyzing(true);
 
     try {
-      const audioBase64 = await blobToBase64(audioBlob);
-      const audioFormat = recorderRef.current.getAudioFormat();
+      const audioBase64 = await blobToBase64(recentAudio);
+      const audioFormat = recorder.getAudioFormat();
 
-      const analysisRes = await fetch("/api/analyze-gap", {
+      const gapRes = await fetch("/api/analyze-gap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ audioBase64, audioFormat, problem: currentSession.problem }),
       });
-      if (!analysisRes.ok) return;
-      const analysis = await analysisRes.json();
-      gapScoresRef.current.push(analysis.gap_score);
 
-      if (analysis.gap_score >= preset.threshold) {
+      if (!gapRes.ok) return;
+      const gapData = await gapRes.json();
+
+      const threshold = observerModeRef.current === "passive" ? 0.7 : 0.5;
+      if (gapData.gapScore >= threshold) {
         const probeRes = await fetch("/api/generate-probe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             problem: currentSession.problem,
-            gapScore: analysis.gap_score,
-            signals: analysis.signals,
+            transcript: gapData.transcript || "",
+            gapScore: gapData.gapScore,
+            signals: gapData.signals || [],
             previousProbes: currentSession.probes.map((p) => p.text),
           }),
         });
-        if (!probeRes.ok) return;
-        const { probe: probeText } = await probeRes.json();
 
-        const newProbe: Omit<Probe, "id"> = {
-          timestamp: elapsedSecondsRef.current * 1000,
-          gapScore: analysis.gap_score,
-          signals: analysis.signals,
-          text: probeText,
-        };
+        if (probeRes.ok) {
+          const { probe: probeText } = await probeRes.json();
 
-        const updatedSession = addProbeToSession(currentSession, newProbe);
-        setSession(updatedSession);
-        setCurrentSession(updatedSession);
-        lastProbeTimeRef.current = Date.now();
+          // Persist probe to Supabase
+          const savedProbe = await addProbe(currentSession.id, {
+            timestamp: Date.now() - new Date(currentSession.startedAt).getTime(),
+            gapScore: gapData.gapScore,
+            signals: gapData.signals || [],
+            text: probeText,
+          });
 
-        const latestProbe = updatedSession.probes[updatedSession.probes.length - 1];
-        setNewProbeId(latestProbe.id);
-        setUnreadCount((c) => c + 1);
+          const updatedSession = addProbeToSession(currentSession, savedProbe);
+          setSession(updatedSession);
+          sessionRef.current = updatedSession;
 
-        // Set as active (front-and-center) probe
-        setActiveProbe(latestProbe);
-        setTimeout(() => setNewProbeId(null), 3000);
+          setActiveProbe(savedProbe);
+          lastProbeTimeRef.current = Date.now();
+        }
       }
 
-      if (gapScoresRef.current.length % 5 === 0 && elapsedSecondsRef.current > 300) {
+      // Check if tutor suggests ending
+      if (currentSession.probes.length > 3) {
         try {
           const endRes = await fetch("/api/check-session-end", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              elapsed: formatTime(elapsedSecondsRef.current),
-              probeCount: currentSession.probes.length,
-              recentScores: gapScoresRef.current.slice(-10),
               problem: currentSession.problem,
+              probeCount: currentSession.probes.length,
+              elapsedMs: Date.now() - new Date(currentSession.startedAt).getTime(),
+              recentProbes: currentSession.probes.slice(-3).map((p) => p.text),
             }),
           });
           if (endRes.ok) {
-            const endCheck = await endRes.json();
-            if (endCheck.should_end) { setEndReason(endCheck.reason); setShowEndDialog(true); }
+            const endData = await endRes.json();
+            if (endData.shouldEnd) {
+              setEndReason(endData.reason || "Socrates thinks you've covered enough ground.");
+              setShowEndDialog(true);
+            }
           }
-        } catch {}
+        } catch { /* silent */ }
       }
     } catch (err) {
       console.error("Analysis error:", err);
     } finally {
-      isAnalyzingRef.current = false;
       setIsAnalyzing(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (isRecording && session && observerMode !== "off") {
-      const preset = FREQUENCY_PRESETS[frequency];
-      analysisRef.current = setInterval(analyzeAudio, preset.intervalMs);
-    } else if (analysisRef.current) { clearInterval(analysisRef.current); }
-    return () => { if (analysisRef.current) clearInterval(analysisRef.current); };
-  }, [isRecording, session, observerMode, frequency, analyzeAudio]);
-
-  const handleMute = (durationMs: number) => { setIsMuted(true); setMuteEndTime(Date.now() + durationMs); };
-
   const startRecording = async () => {
     try {
       setError(null);
-      const recorder = new AudioRecorder({ chunkDurationMs: 5000, maxBufferDurationMs: 60000 });
-      await recorder.start();
-      recorderRef.current = recorder;
-      setIsRecording(true);
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setStream(mediaStream);
 
-      // Fire opening probe from Socrates
+      // Fire opening probe
       if (sessionRef.current) {
         setOpeningProbeLoading(true);
         try {
@@ -223,360 +265,385 @@ export function SessionView() {
           });
           if (res.ok) {
             const { probe: probeText } = await res.json();
-            if (probeText && sessionRef.current) {
-              const openingProbe: Omit<Probe, "id"> = {
+            const currentSession = sessionRef.current;
+            if (currentSession) {
+              const savedProbe = await addProbe(currentSession.id, {
                 timestamp: 0,
                 gapScore: 0,
                 signals: ["opening"],
                 text: probeText,
-              };
-              const updated = addProbeToSession(sessionRef.current, openingProbe);
-              setSession(updated);
-              setCurrentSession(updated);
-              const latest = updated.probes[updated.probes.length - 1];
-              setActiveProbe(latest);
+              });
+              const updatedSession = addProbeToSession(currentSession, savedProbe);
+              setSession(updatedSession);
+              sessionRef.current = updatedSession;
+              setActiveProbe(savedProbe);
             }
           }
-        } catch {
-          // Opening probe is nice-to-have, don't block session
-        } finally {
-          setOpeningProbeLoading(false);
-        }
+        } catch { /* opening probe is optional */ }
+        finally { setOpeningProbeLoading(false); }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to access microphone.");
+
+      const recorder = new AudioRecorder({ chunkDurationMs: 5000, maxBufferDurationMs: 30000 });
+      recorderRef.current = recorder;
+      await recorder.start();
+      setIsRecording(true);
+
+      const startTime = Date.now();
+      timerRef.current = setInterval(() => {
+        setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
+
+      analysisRef.current = setInterval(() => {
+        analyzeAudio();
+      }, ANALYSIS_INTERVALS[frequency]);
+    } catch {
+      setError("Could not access microphone. Please grant permission and try again.");
     }
   };
 
-  const connectMuse = async () => {
-    setMuseConnecting(true);
-    setMuseError(null);
-    try {
-      const manager = getMuseManager();
-      museManagerRef.current = manager;
+  const stopRecording = async () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (analysisRef.current) clearInterval(analysisRef.current);
 
-      // Listen for band power updates
-      manager.onBandPowers((powers) => {
-        setBandPowers(powers);
-      });
-
-      // Listen for status changes
-      manager.onStatusChange((status) => {
-        setMuseConnected(status === "connected" || status === "streaming");
-        setMuseStreaming(status === "streaming");
-      });
-
-      await manager.connect();
-      setMuseConnected(true);
-
-      // Start streaming immediately
-      await manager.startStreaming(Date.now());
-      setMuseStreaming(true);
-
-    } catch (err) {
-      const error = err as Error;
-      if (error?.name === "NotFoundError" && error?.message?.includes("cancelled")) {
-        // User dismissed the BT dialog
-        setMuseConnecting(false);
-        return;
-      }
-      setMuseError(error?.message || "Failed to connect Muse");
-    } finally {
-      setMuseConnecting(false);
-    }
-  };
-
-  const disconnectMuse = () => {
-    if (museManagerRef.current) {
-      museManagerRef.current.disconnect();
-      museManagerRef.current = null;
-    }
-    setMuseConnected(false);
-    setMuseStreaming(false);
-    setBandPowers(null);
-    setEegChannelData(new Map());
-  };
-
-  // Update EEG channel data for waveform from the MuseManager's buffer
-  useEffect(() => {
-    if (!museStreaming || !museManagerRef.current) return;
-
-    const interval = setInterval(() => {
-      const manager = museManagerRef.current;
-      if (!manager) return;
-
-      const { eeg } = manager.getSessionData();
-      if (eeg.length === 0) return;
-
-      // Build per-channel rolling buffers from the EEG readings
-      const channelMap = new Map<string, number[]>();
-      const channelNames = ["TP9", "AF7", "AF8", "TP10", "FPz", "AUX_R", "AUX_L"];
-
-      for (const name of channelNames) {
-        channelMap.set(name, []);
-      }
-
-      // Take the last ~1024 readings per electrode
-      const recentReadings = eeg.slice(-1024);
-      for (const reading of recentReadings) {
-        const chName = channelNames[reading.electrode];
-        if (chName) {
-          const existing = channelMap.get(chName)!;
-          existing.push(...reading.samples);
-          // Keep only last 512 samples for display
-          if (existing.length > 512) {
-            channelMap.set(chName, existing.slice(-512));
-          }
-        }
-      }
-
-      setEegChannelData(channelMap);
-    }, 100); // Update at ~10fps for smooth waveform
-
-    return () => clearInterval(interval);
-  }, [museStreaming]);
-
-  // Cleanup Muse on unmount
-  useEffect(() => {
-    return () => {
-      if (museManagerRef.current) {
-        museManagerRef.current.disconnect();
-      }
-    };
-  }, []);
-
-  const stopRecording = async (status: "completed" | "ended_by_tutor" = "completed") => {
-    if (!recorderRef.current || !session) return;
-
-    const fullAudio = recorderRef.current.getFullAudio();
-    recorderRef.current.stop();
+    const recorder = recorderRef.current;
+    const fullAudio = recorder?.getFullAudio() ?? null;
+    recorder?.stop();
     recorderRef.current = null;
-    setIsRecording(false);
 
     if (stream) { stream.getTracks().forEach((t) => t.stop()); setStream(null); }
+    setIsRecording(false);
+    if (!session) return;
 
-    // Stop Muse streaming if active
-    if (museManagerRef.current && museStreaming) {
-      try { await museManagerRef.current.stopStreaming(); } catch {}
-    }
-
-    const finalSession = endSession(session, elapsedSeconds * 1000, status);
+    const finalSession = endSession(session, elapsedSeconds * 1000);
     finalSession.hasAudio = !!fullAudio;
 
-    // Include EEG summary in metadata
-    const avgBands = museManagerRef.current?.getAverageBandPowers();
-    const eegSummary = avgBands ? { delta: avgBands.delta, theta: avgBands.theta, alpha: avgBands.alpha, beta: avgBands.beta, gamma: avgBands.gamma } : null;
-    finalSession.metadata = { observerMode, frequency, hasEeg: museConnected, eegSummary };
+    // Persist to Supabase
+    await saveSession(finalSession);
 
-    saveSession(finalSession);
-    setCurrentSession(null);
+    if (fullAudio) {
+      try { await saveSessionAudio(finalSession.id, fullAudio); } catch {}
+    }
 
-    if (fullAudio) { try { await saveSessionAudio(finalSession.id, fullAudio); } catch {} }
+    // Save EEG data if Muse was streaming
+    if (museStatus === "streaming" && eegBufferRef.current.size > 0) {
+      try {
+        const channels: Record<string, number[]> = {};
+        for (const [ch, samples] of eegBufferRef.current.entries()) {
+          channels[ch] = samples;
+        }
+        await saveSessionEEG(finalSession.id, { channels, bandPowers }, museClientRef.current?.deviceName);
+      } catch {}
+    }
 
-    try {
-      const probesSummary = finalSession.probes
-        .map((p, i) => `${i + 1}. [${formatTime(Math.floor(p.timestamp / 1000))}] Gap: ${(p.gapScore * 100).toFixed(0)}% - ${p.text}`)
-        .join("\n");
-
-      const reportRes = await fetch("/api/generate-report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          problem: finalSession.problem,
-          duration: formatTime(Math.floor(finalSession.durationMs / 1000)),
-          probeCount: finalSession.probes.length,
-          avgGapScore: finalSession.probes.length > 0
-            ? finalSession.probes.reduce((s, p) => s + p.gapScore, 0) / finalSession.probes.length : 0,
-          probesSummary,
-        }),
-      });
-
-      if (reportRes.ok) {
-        const { report } = await reportRes.json();
-        finalSession.report = report;
-        finalSession.reportGeneratedAt = new Date().toISOString();
-        saveSession(finalSession);
-      }
-    } catch {}
-
+    handleDisconnectMuse();
     router.push(`/results?id=${finalSession.id}`);
   };
 
+  const handleMute = (durationMs: number) => {
+    setIsMuted(true);
+    setMuteRemaining(durationMs);
+    if (muteTimerRef.current) clearTimeout(muteTimerRef.current);
+    muteTimerRef.current = setTimeout(() => { setIsMuted(false); setMuteRemaining(0); }, durationMs);
+  };
+
+  const handleConfirmEnd = async () => {
+    setShowEndDialog(false);
+    if (session) {
+      const finalSession = endSession(session, elapsedSeconds * 1000, "ended_by_tutor");
+      setSession(finalSession);
+      sessionRef.current = finalSession;
+    }
+    await stopRecording();
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (analysisRef.current) clearInterval(analysisRef.current);
+      if (muteTimerRef.current) clearTimeout(muteTimerRef.current);
+      handleDisconnectMuse();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
         <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
       </div>
     );
   }
 
-  // Probes for sidebar = all except the active one
-  const sidebarProbes = session.probes.filter((p) => p.id !== activeProbe?.id);
-
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       {/* Header */}
-      <header className="border-b border-neutral-800 px-4 py-3">
+      <header className="border-b border-neutral-800/60 px-4 py-3 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-neutral-400 line-clamp-1">{session.problem}</p>
+          <div className="flex items-center gap-3 min-w-0">
+            <a href="/" className="text-lg font-semibold text-white tracking-tight shrink-0 hover:text-neutral-300 transition-colors">Socrates</a>
+            <span className="text-neutral-700 shrink-0">&middot;</span>
+            <p className="text-sm text-neutral-500 truncate">{session.problem}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             {isAnalyzing && (
-              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" title="Observing" />
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                <span className="text-[11px] text-blue-400">Observing</span>
+              </div>
             )}
-            <div className="text-lg font-mono text-white tabular-nums">{formatTime(elapsedSeconds)}</div>
+            <div className="text-sm font-mono text-neutral-300 tabular-nums bg-neutral-900/50 px-2.5 py-1 rounded-lg border border-neutral-800">
+              {formatTime(elapsedSeconds)}
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full px-4 py-4 gap-4">
+      <div className="flex-1 flex flex-col max-w-5xl mx-auto w-full px-6 py-5">
 
-        {/* Active Probe Zone -- front and center */}
+        {/* How It Works — shown before session starts */}
+        {!isRecording && (
+          <div className="mb-5 rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
+            <h3 className="text-sm font-medium text-neutral-300 mb-4">How a session works</h3>
+
+            {/* Flow diagram */}
+            <div className="flex items-start gap-3 mb-4">
+              {[
+                { icon: "🎙", label: "You talk", desc: "Think out loud about your topic" },
+                { icon: "🔍", label: "Socrates listens", desc: "Audio is analyzed for reasoning gaps" },
+                { icon: "❓", label: "You get probed", desc: "Socratic questions push you deeper" },
+                { icon: "📊", label: "You get a report", desc: "AI summary of your session" },
+              ].map((step, i) => (
+                <div key={i} className="flex-1 relative">
+                  <div className="flex flex-col items-center text-center gap-1.5">
+                    <div className="w-10 h-10 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-base">
+                      {step.icon}
+                    </div>
+                    <p className="text-xs font-medium text-neutral-300">{step.label}</p>
+                    <p className="text-[11px] text-neutral-600 leading-tight">{step.desc}</p>
+                  </div>
+                  {i < 3 && (
+                    <div className="absolute top-5 left-[calc(50%+24px)] w-[calc(100%-48px)] flex items-center">
+                      <div className="flex-1 border-t border-dashed border-neutral-700" />
+                      <svg className="w-3 h-3 text-neutral-700 -ml-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Tips + Controls side by side */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[11px] text-neutral-500 mb-2 font-medium">Tips</p>
+                <div className="space-y-1.5">
+                  {[
+                    "Speak naturally — explain as if teaching a friend",
+                    "Don't worry about pauses, they help Socrates analyze",
+                    "Answer the probes out loud to deepen your understanding",
+                    "Sessions typically last 5–20 minutes",
+                  ].map((tip, i) => (
+                    <div key={i} className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-neutral-800/40">
+                      <span className="text-neutral-600 text-[11px] mt-px shrink-0">✦</span>
+                      <p className="text-[11px] text-neutral-500 leading-relaxed">{tip}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] text-neutral-500 mb-2 font-medium">Controls reference</p>
+                <div className="space-y-2">
+                  {[
+                    { icon: <MicIcon />, label: "Start / End Session", desc: "Begin or stop recording" },
+                    { icon: <ObserverIcon />, label: "Observer Mode", desc: "Off / Passive / Active probing" },
+                    { icon: <FreqIcon />, label: "Frequency", desc: "How often Socrates checks in" },
+                    { icon: <SpeakerIcon />, label: "Auto-read", desc: "Probes read aloud via TTS" },
+                    { icon: <BluetoothIcon />, label: "Connect Muse", desc: "Pair EEG headband" },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <div className="w-6 h-6 rounded-md bg-neutral-800 border border-neutral-700 flex items-center justify-center text-neutral-400 shrink-0 mt-0.5">
+                        {item.icon}
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-medium text-neutral-300">{item.label}</p>
+                        <p className="text-[10px] text-neutral-600 leading-tight">{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Probe */}
         {isRecording && (
           <ActiveProbe
             probe={activeProbe}
             problem={session.problem}
             isLoading={openingProbeLoading}
             autoSpeak={autoSpeak}
-            onToggleAutoSpeak={() => setAutoSpeak((v) => !v)}
+            onToggleAutoSpeak={() => setAutoSpeak((p) => !p)}
           />
         )}
 
-        {/* Audio + EEG + Controls Card */}
-        <div className="bg-neutral-900 rounded-xl p-4 border border-neutral-800">
-          {/* Visualizer */}
-          <div className="mb-3">
+        {/* Recording Card */}
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mt-4">
+          {/* Audio Visualizer — always visible */}
+          <div className="mb-4">
             {isRecording ? (
               <AudioVisualizer isRecording={isRecording} stream={stream} />
             ) : (
-              <div className="h-12 flex items-center justify-center text-neutral-500 text-sm">
+              <div className="h-16 flex items-center justify-center text-neutral-600 text-sm">
                 Ready to begin
               </div>
             )}
           </div>
 
-          {/* Muse EEG Section */}
-          {isMuseSupported() && (
-            <div className="mt-2">
-              {!museConnected && !museStreaming ? (
+          {/* Status + Controls Row */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <RecordingIndicator isRecording={isRecording} />
+              {/* Muse connect / status */}
+              {museStatus === "disconnected" || museStatus === "connecting" ? (
                 <button
-                  onClick={connectMuse}
-                  disabled={museConnecting}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 rounded-lg transition-colors"
+                  onClick={handleConnectMuse}
+                  disabled={museStatus === "connecting"}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 rounded-lg border border-neutral-700 transition-colors"
                 >
-                  <BrainIcon />
-                  {museConnecting ? "Connecting..." : "Connect Muse"}
+                  <BluetoothIcon />
+                  {museStatus === "connecting" ? "Connecting..." : "Connect Muse"}
                 </button>
               ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${museStreaming ? "bg-green-500 animate-pulse" : "bg-yellow-500"}`} />
-                      <span className="text-xs text-neutral-400">
-                        {museStreaming ? "EEG streaming" : "Muse connected"}
-                      </span>
-                    </div>
-                    <button
-                      onClick={disconnectMuse}
-                      className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
-                    >
-                      Disconnect
-                    </button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 border border-green-500/20 rounded-lg">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-[11px] text-green-400">Muse</span>
                   </div>
-
-                  {museStreaming && (
-                    <EEGWaveView
-                      channelData={eegChannelData}
-                      visibleSamples={512}
-                      traceHeight={36}
-                      channels={["TP9", "AF7", "AF8", "TP10"]}
-                    />
-                  )}
-
-                  <BrainStateBar powers={bandPowers} isConnected={museConnected} />
+                  <button
+                    onClick={handleDisconnectMuse}
+                    className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors"
+                  >
+                    Disconnect
+                  </button>
                 </div>
               )}
+            </div>
+            {isRecording && (
+              <ObserverControls
+                mode={observerMode}
+                frequency={frequency}
+                onModeChange={setObserverMode}
+                onFrequencyChange={setFrequency}
+                onMute={handleMute}
+                isMuted={isMuted}
+                muteRemaining={muteRemaining}
+              />
+            )}
+          </div>
 
-              {museError && (
-                <p className="text-xs text-red-400 mt-1">{museError}</p>
+          {/* Muse EEG minimal status — just confirm it's recording */}
+          {museStatus === "streaming" && isRecording && (
+            <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[11px] text-neutral-500">EEG recording</span>
+              <span className="text-[11px] text-neutral-700">·</span>
+              <span className="text-[11px] text-neutral-600 font-mono">{eegChannelData.size} ch</span>
+              {bandPowers && (
+                <>
+                  <span className="text-[11px] text-neutral-700">·</span>
+                  <span className="text-[11px] text-neutral-600">α {(bandPowers.alpha * 100).toFixed(0)}%</span>
+                </>
               )}
             </div>
           )}
 
-          {/* Controls Row */}
-          <div className="flex items-center justify-between mt-3 mb-3">
-            <RecordingIndicator isRecording={isRecording} />
-            <ObserverControls
-              mode={observerMode}
-              frequency={frequency}
-              onModeChange={setObserverMode}
-              onFrequencyChange={setFrequency}
-              onMute={handleMute}
-              isMuted={isMuted}
-              muteRemaining={isMuted ? muteEndTime - Date.now() : undefined}
-            />
-          </div>
+          {/* Muse EEG channel readiness — only before session starts */}
+          {museStatus === "streaming" && !isRecording && (() => {
+            const expectedChannels = ["TP9", "AF7", "AF8", "TP10"];
+            const detectedChannels = expectedChannels.filter(ch => {
+              const samples = eegChannelData.get(ch);
+              return samples && samples.length > 0;
+            });
+            const allReady = detectedChannels.length >= expectedChannels.length;
+            return (
+              <div className="mb-4 px-3.5 py-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {expectedChannels.map(ch => {
+                      const active = detectedChannels.includes(ch);
+                      return (
+                        <div key={ch} className="flex items-center gap-1.5">
+                          <div className={`w-1.5 h-1.5 rounded-full ${active ? "bg-green-500" : "bg-neutral-700 animate-pulse"}`} />
+                          <span className={`text-[11px] font-mono ${active ? "text-green-400" : "text-neutral-600"}`}>{ch}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${allReady ? "text-green-400 bg-green-500/10 border border-green-500/20" : "text-neutral-500 bg-neutral-800/50 border border-neutral-800"}`}>
+                    {allReady ? "Ready to go" : `Waiting for channels (${detectedChannels.length}/${expectedChannels.length})`}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
 
-          {/* Start/Stop */}
-          <div className="flex gap-3">
+          {museError && (
+            <div className="mb-4 p-2.5 bg-red-500/5 border border-red-500/20 rounded-lg text-red-400 text-[11px]">
+              {museError}
+            </div>
+          )}
+
+          {/* Start / Stop */}
+          <div className="flex gap-4">
             {!isRecording ? (
               <button
                 onClick={startRecording}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                className="flex-1 py-3.5 bg-white hover:bg-neutral-200 text-black font-medium rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
               >
                 <MicIcon />
-                Start
+                Start Session
               </button>
             ) : (
               <button
-                onClick={() => stopRecording("completed")}
-                className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                onClick={stopRecording}
+                className="flex-1 py-3.5 bg-red-600/80 hover:bg-red-500 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
               >
                 <StopIcon />
-                End
+                End Session
               </button>
             )}
           </div>
 
           {error && (
-            <div className="mt-3 p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-sm">
+            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
               {error}
             </div>
           )}
         </div>
       </div>
 
-      {/* Probe History Sidebar */}
-      <ProbeSidebar
-        probes={sidebarProbes}
-        problem={session.problem}
-        isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
-        unreadCount={unreadCount}
-        onMarkAllRead={() => setUnreadCount(0)}
-        newProbeId={newProbeId}
-      />
-
       {/* Tutor-End Dialog */}
       {showEndDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-neutral-900 border border-neutral-700 rounded-2xl p-6 max-w-md mx-4">
-            <h3 className="text-lg font-semibold text-white mb-2">Socrates suggests ending</h3>
-            <p className="text-neutral-400 mb-6 text-sm">{endReason}</p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setShowEndDialog(false); stopRecording("ended_by_tutor"); }}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors text-sm"
-              >
-                End Now
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 max-w-md mx-4">
+            <h3 className="text-base font-semibold text-white mb-2">Socrates suggests ending</h3>
+            <p className="text-neutral-400 mb-5 text-sm leading-relaxed">{endReason}</p>
+            <div className="flex gap-2.5">
               <button
                 onClick={() => setShowEndDialog(false)}
-                className="flex-1 py-3 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl transition-colors text-sm"
+                className="flex-1 py-2.5 text-sm text-neutral-400 border border-neutral-700 hover:border-neutral-500 rounded-xl transition-colors"
               >
-                Continue
+                Keep going
+              </button>
+              <button
+                onClick={handleConfirmEnd}
+                className="flex-1 py-2.5 text-sm text-white bg-white/10 hover:bg-white/15 rounded-xl transition-colors"
+              >
+                End session
               </button>
             </div>
           </div>
@@ -586,13 +653,48 @@ export function SessionView() {
   );
 }
 
-function BrainIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-    </svg>
-  );
+// ---- Band Power Computation ----
+
+function computeBandPowers(af7: number[], af8: number[]) {
+  const n = 256;
+  const sampleRate = 256;
+  const bandRanges: Record<string, [number, number]> = {
+    delta: [1, 4], theta: [4, 8], alpha: [8, 13], beta: [13, 30], gamma: [30, 44],
+  };
+
+  function channelBands(samples: number[]) {
+    const windowed = samples.map((s, i) => s * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1))));
+    const powers: Record<string, number> = {};
+    for (const [band, [fLow, fHigh]] of Object.entries(bandRanges)) {
+      let power = 0;
+      const binLow = Math.floor((fLow * n) / sampleRate);
+      const binHigh = Math.min(Math.ceil((fHigh * n) / sampleRate), n / 2);
+      for (let k = binLow; k <= binHigh; k++) {
+        let re = 0, im = 0;
+        for (let j = 0; j < n; j++) {
+          const angle = (2 * Math.PI * k * j) / n;
+          re += windowed[j] * Math.cos(angle);
+          im -= windowed[j] * Math.sin(angle);
+        }
+        power += (re * re + im * im) / (n * n);
+      }
+      powers[band] = power;
+    }
+    return powers;
+  }
+
+  const p1 = channelBands(af7.slice(-n));
+  const p2 = channelBands(af8.slice(-n));
+  const avg: Record<string, number> = {};
+  for (const band of Object.keys(bandRanges)) avg[band] = ((p1[band] || 0) + (p2[band] || 0)) / 2;
+
+  const total = Object.values(avg).reduce((s, v) => s + v, 0);
+  if (total > 0) for (const band of Object.keys(avg)) avg[band] /= total;
+
+  return { delta: avg.delta || 0, theta: avg.theta || 0, alpha: avg.alpha || 0, beta: avg.beta || 0, gamma: avg.gamma || 0 };
 }
+
+// ---- Icons ----
 
 function MicIcon() {
   return (
@@ -607,6 +709,39 @@ function StopIcon() {
     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+    </svg>
+  );
+}
+
+function ObserverIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+    </svg>
+  );
+}
+
+function FreqIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
+function SpeakerIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+    </svg>
+  );
+}
+
+function BluetoothIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7l10 10-5 5V2l5 5L7 17" />
     </svg>
   );
 }

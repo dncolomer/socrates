@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getSessions, deleteSession, getSessionStats, type Session } from "@/lib/storage";
+// All storage is now Supabase-only (no localStorage fallback)
 import { formatTime } from "@/lib/utils";
 import { EEGWaveView } from "@/components/EEGWaveView";
 import { BrainStateBar } from "@/components/BrainStateBar";
@@ -49,102 +50,65 @@ export default function DashboardPage() {
       const supabase = createClient();
       const { data: { user: authUser } } = await supabase.auth.getUser();
 
-      if (authUser) {
-        setUser({ email: authUser.email });
-
-        // Try fetching profile
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("username, metadata")
-          .eq("id", authUser.id)
-          .single();
-
-        if (profile) {
-          setUser({
-            email: authUser.email,
-            username: profile.username || undefined,
-          });
-          if (profile.metadata?.muse_device_name) {
-            setMuseDeviceName(profile.metadata.muse_device_name);
-          }
-          if (profile.metadata?.prompts) {
-            setUserPrompts(profile.metadata.prompts as UserPrompts);
-          }
-        }
-
-        // Try fetching sessions from Supabase
-        const { data: dbSessions } = await supabase
-          .from("sessions")
-          .select("*")
-          .eq("user_id", authUser.id)
-          .order("created_at", { ascending: false });
-
-        if (dbSessions && dbSessions.length > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const mapped: Session[] = dbSessions.map((s: any) => ({
-            id: s.id,
-            problem: s.problem,
-            startedAt: s.created_at,
-            endedAt: s.ended_at,
-            durationMs: s.duration_ms || 0,
-            status: s.status,
-            probes: [],
-            hasAudio: !!s.audio_path,
-            audioPath: s.audio_path,
-            report: s.report,
-            reportGeneratedAt: s.report_generated_at,
-            metadata: s.metadata || {},
-          }));
-          setSessions(mapped);
-        } else {
-          // Fallback to local storage
-          const localSessions = getSessions();
-          localSessions.sort(
-            (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-          );
-          setSessions(localSessions);
-        }
-
-        // Load transcripts
-        const { data: ts } = await supabase
-          .from("user_transcripts")
-          .select("*")
-          .eq("user_id", authUser.id)
-          .order("created_at", { ascending: false });
-
-        if (ts) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          setTranscripts(ts.map((t: any) => ({
-            id: t.id,
-            filename: t.filename,
-            status: t.status,
-            chunkCount: t.chunk_count,
-            createdAt: t.created_at,
-          })));
-        }
-      } else {
-        // No auth - load local sessions
-        const localSessions = getSessions();
-        localSessions.sort(
-          (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-        );
-        setSessions(localSessions);
+      if (!authUser) {
+        // Dashboard requires auth — redirect
+        router.push("/login");
+        return;
       }
-    } catch {
-      // Fallback to local storage on any error
-      const localSessions = getSessions();
-      localSessions.sort(
-        (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-      );
-      setSessions(localSessions);
+
+      setUser({ email: authUser.email });
+
+      // Fetch profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username, metadata")
+        .eq("id", authUser.id)
+        .single();
+
+      if (profile) {
+        setUser({
+          email: authUser.email,
+          username: profile.username || undefined,
+        });
+        if (profile.metadata?.muse_device_name) {
+          setMuseDeviceName(profile.metadata.muse_device_name);
+        }
+        if (profile.metadata?.prompts) {
+          setUserPrompts(profile.metadata.prompts as UserPrompts);
+        }
+      }
+
+      // Load sessions from Supabase (with probes)
+      const loadedSessions = await getSessions();
+      setSessions(loadedSessions);
+
+      // Load transcripts
+      const { data: ts } = await supabase
+        .from("user_transcripts")
+        .select("*")
+        .eq("user_id", authUser.id)
+        .order("created_at", { ascending: false });
+
+      if (ts) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setTranscripts(ts.map((t: any) => ({
+          id: t.id,
+          filename: t.filename,
+          status: t.status,
+          chunkCount: t.chunk_count,
+          createdAt: t.created_at,
+        })));
+      }
+    } catch (err) {
+      console.error("Dashboard load error:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteSession = (id: string) => {
+  const handleDeleteSession = async (id: string) => {
     if (!confirm("Delete this session? This cannot be undone.")) return;
-    deleteSession(id);
+    await deleteSession(id);
     setSessions((prev) => prev.filter((s) => s.id !== id));
   };
 
@@ -355,22 +319,26 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       {/* Header */}
-      <header className="border-b border-neutral-800 px-6 py-4">
+      <header className="border-b border-neutral-800/60 px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="text-xl font-bold text-white">Socrates</Link>
-            <span className="text-neutral-600">|</span>
-            <span className="text-sm text-neutral-400">Dashboard</span>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-lg font-semibold text-white tracking-tight">Socrates</Link>
+            <span className="text-[10px] text-neutral-600 font-medium uppercase tracking-widest">Dashboard</span>
           </div>
           <div className="flex items-center gap-4">
-            {user?.email && (
-              <span className="text-sm text-neutral-400">{user.email}</span>
+            <Link href="/pricing" className="text-sm text-neutral-500 hover:text-white transition-colors">
+              Pricing
+            </Link>
+            {user && (
+              <span className="text-sm text-neutral-500">
+                {user.username || user.email}
+              </span>
             )}
             <button
               onClick={handleSignOut}
-              className="text-sm text-neutral-500 hover:text-white transition-colors"
+              className="text-xs text-neutral-600 hover:text-white transition-colors"
             >
               Sign Out
             </button>
@@ -379,31 +347,41 @@ export default function DashboardPage() {
       </header>
 
       <div className="flex-1 max-w-5xl mx-auto w-full px-6 py-8">
-        {/* Stats Overview */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <StatCard label="Sessions" value={totalSessions.toString()} />
-          <StatCard label="Total Time" value={`${totalMinutes}m`} />
-          <StatCard label="Total Probes" value={allProbes.toString()} />
-          <StatCard
-            label="Avg Gap"
-            value={
-              sessions.length > 0
-                ? `${Math.round(
-                    (sessions.reduce((s, sess) => {
-                      const stats = getSessionStats(sess);
-                      return s + stats.avgGapScore;
-                    }, 0) / sessions.length) * 100
-                  )}%`
-                : "—"
-            }
-          />
-        </div>
-
-        {/* Start New Session */}
-        <div className="mb-8">
+        {/* Stats + New Session Row */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-6">
+            <div>
+              <p className="text-[11px] text-neutral-600 uppercase tracking-wider">Sessions</p>
+              <p className="text-2xl font-bold text-white">{totalSessions}</p>
+            </div>
+            <div className="w-px h-8 bg-neutral-800" />
+            <div>
+              <p className="text-[11px] text-neutral-600 uppercase tracking-wider">Time</p>
+              <p className="text-2xl font-bold text-white">{totalMinutes}m</p>
+            </div>
+            <div className="w-px h-8 bg-neutral-800" />
+            <div>
+              <p className="text-[11px] text-neutral-600 uppercase tracking-wider">Probes</p>
+              <p className="text-2xl font-bold text-white">{allProbes}</p>
+            </div>
+            <div className="w-px h-8 bg-neutral-800" />
+            <div>
+              <p className="text-[11px] text-neutral-600 uppercase tracking-wider">Avg Gap</p>
+              <p className="text-2xl font-bold text-white">
+                {sessions.length > 0
+                  ? `${Math.round(
+                      (sessions.reduce((s, sess) => {
+                        const stats = getSessionStats(sess);
+                        return s + stats.avgGapScore;
+                      }, 0) / sessions.length) * 100
+                    )}%`
+                  : "—"}
+              </p>
+            </div>
+          </div>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/15 text-white text-sm font-medium rounded-lg transition-colors"
           >
             <PlusIcon />
             New Session
@@ -411,15 +389,15 @@ export default function DashboardPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-neutral-900 rounded-lg p-1 w-fit">
+        <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 scrollbar-hide">
           {(["sessions", "transcripts", "devices", "prompts"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm rounded-md transition-colors capitalize ${
+              className={`shrink-0 px-3.5 py-1.5 text-xs rounded-full border transition-colors capitalize ${
                 activeTab === tab
-                  ? "bg-neutral-700 text-white"
-                  : "text-neutral-500 hover:text-neutral-300"
+                  ? "bg-white text-black border-white"
+                  : "text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white"
               }`}
             >
               {tab === "transcripts" ? "Think-Aloud Data" : tab}
@@ -449,13 +427,13 @@ export default function DashboardPage() {
 
         {activeTab === "transcripts" && (
           <div>
-            <div className="bg-neutral-900 rounded-2xl p-6 border border-neutral-800 mb-6">
-              <h3 className="text-white font-semibold mb-2">My Think-Aloud Data</h3>
-              <p className="text-neutral-400 text-sm mb-4">
-                Upload recordings of yourself thinking through problems. Socrates
-                will learn your reasoning patterns and ask better questions.
-              </p>
-
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-sm text-neutral-400">
+                  Upload recordings of yourself thinking through problems. Socrates
+                  will learn your reasoning patterns.
+                </p>
+              </div>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -466,18 +444,18 @@ export default function DashboardPage() {
               />
               <label
                 htmlFor="transcript-upload"
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer transition-colors ${
+                className={`shrink-0 inline-flex items-center gap-2 px-3.5 py-1.5 text-xs rounded-lg cursor-pointer transition-colors ${
                   uploading
-                    ? "bg-neutral-700 text-neutral-400"
-                    : "bg-neutral-800 text-white hover:bg-neutral-700"
+                    ? "bg-neutral-800 text-neutral-500"
+                    : "bg-white/10 hover:bg-white/15 text-white"
                 }`}
               >
                 <UploadIcon />
-                {uploading ? "Uploading..." : "Upload Transcript"}
+                {uploading ? "Uploading..." : "Upload"}
               </label>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {transcripts.length === 0 ? (
                 <EmptyState
                   title="No transcripts uploaded"
@@ -487,11 +465,11 @@ export default function DashboardPage() {
                 transcripts.map((t) => (
                   <div
                     key={t.id}
-                    className="bg-neutral-900 rounded-xl p-4 border border-neutral-800 flex items-center justify-between"
+                    className="group flex items-center justify-between p-3.5 rounded-xl border border-neutral-800 bg-neutral-900/50 hover:bg-neutral-800/50 hover:border-neutral-700 transition-all duration-200"
                   >
                     <div>
-                      <p className="text-white text-sm">{t.filename}</p>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-neutral-500">
+                      <p className="text-sm text-neutral-200">{t.filename}</p>
+                      <div className="flex items-center gap-3 mt-1 text-[11px] text-neutral-600">
                         <StatusBadge status={t.status} />
                         <span>{t.chunkCount} chunks</span>
                         <span>{new Date(t.createdAt).toLocaleDateString()}</span>
@@ -499,7 +477,7 @@ export default function DashboardPage() {
                     </div>
                     <button
                       onClick={() => handleDeleteTranscript(t.id)}
-                      className="p-2 text-neutral-500 hover:text-red-400 transition-colors"
+                      className="p-1.5 text-neutral-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
                     >
                       <TrashIcon />
                     </button>
@@ -511,79 +489,74 @@ export default function DashboardPage() {
         )}
 
         {activeTab === "devices" && (
-          <div className="bg-neutral-900 rounded-2xl p-6 border border-neutral-800">
-            <h3 className="text-white font-semibold mb-2">Muse EEG Headband</h3>
-            <p className="text-neutral-400 text-sm mb-4">
-              Connect a Muse Athena, Muse 2, or Muse S headband to record brain
-              activity during sessions.
-            </p>
+          <div>
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-sm text-neutral-400">
+                Connect a Muse EEG headband to record brain activity during sessions.
+              </p>
+              {museStatus === "disconnected" || museStatus === "connecting" ? (
+                <button
+                  onClick={handleConnectMuse}
+                  disabled={museStatus === "connecting"}
+                  className="shrink-0 inline-flex items-center gap-2 px-3.5 py-1.5 text-xs bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white rounded-lg transition-colors"
+                >
+                  <BluetoothIcon />
+                  {museStatus === "connecting" ? "Connecting..." : "Connect Muse"}
+                </button>
+              ) : (
+                <button
+                  onClick={handleDisconnectMuse}
+                  className="shrink-0 inline-flex items-center gap-2 px-3.5 py-1.5 text-xs text-neutral-400 border border-neutral-700 hover:border-neutral-500 hover:text-white rounded-lg transition-colors"
+                >
+                  Disconnect
+                </button>
+              )}
+            </div>
 
             {typeof navigator !== "undefined" && !("bluetooth" in navigator) ? (
-              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-sm">
-                Muse integration requires Chrome or Edge browser (Web Bluetooth not supported in this browser).
+              <div className="p-3.5 bg-amber-500/5 border border-amber-500/20 rounded-xl text-amber-400/80 text-xs">
+                Web Bluetooth not supported in this browser. Use Chrome or Edge.
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Connection controls */}
-                <div className="flex items-center gap-4">
-                  {museStatus === "disconnected" || museStatus === "connecting" ? (
-                    <button
-                      onClick={handleConnectMuse}
-                      disabled={museStatus === "connecting"}
-                      className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 disabled:bg-neutral-700 text-white rounded-xl transition-colors flex items-center gap-2"
-                    >
-                      <BluetoothIcon />
-                      {museStatus === "connecting" ? "Connecting..." : "Connect Muse"}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleDisconnectMuse}
-                      className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl transition-colors flex items-center gap-2"
-                    >
-                      <BluetoothIcon />
-                      Disconnect
-                    </button>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-3 h-3 rounded-full ${
-                        museStatus === "streaming"
-                          ? "bg-green-500 animate-pulse"
-                          : museStatus === "connected"
-                          ? "bg-green-500"
-                          : museStatus === "connecting"
-                          ? "bg-yellow-500 animate-pulse"
-                          : "bg-neutral-600"
-                      }`}
-                    />
-                    <span className="text-sm text-neutral-400 capitalize">{museStatus}</span>
-                  </div>
-
+                {/* Status bar */}
+                <div className="flex items-center gap-3 p-3.5 rounded-xl border border-neutral-800 bg-neutral-900/50">
+                  <div
+                    className={`w-2.5 h-2.5 rounded-full ${
+                      museStatus === "streaming"
+                        ? "bg-green-500 animate-pulse"
+                        : museStatus === "connected"
+                        ? "bg-green-500"
+                        : museStatus === "connecting"
+                        ? "bg-yellow-500 animate-pulse"
+                        : "bg-neutral-700"
+                    }`}
+                  />
+                  <span className="text-xs text-neutral-400 capitalize">{museStatus}</span>
                   {museDeviceName && museStatus !== "disconnected" && (
-                    <span className="text-sm text-neutral-500">
-                      {museDeviceName}
+                    <>
+                      <span className="text-neutral-800">·</span>
+                      <span className="text-xs text-neutral-500">{museDeviceName}</span>
+                    </>
+                  )}
+                  {museDeviceName && museStatus === "disconnected" && (
+                    <span className="text-xs text-neutral-600">
+                      Last: {museDeviceName}
                     </span>
                   )}
                 </div>
 
                 {museError && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-sm">
+                  <div className="p-3 bg-red-500/5 border border-red-500/20 rounded-xl text-red-400 text-xs">
                     {museError}
                   </div>
                 )}
 
-                {museDeviceName && museStatus === "disconnected" && (
-                  <p className="text-sm text-neutral-500">
-                    Last device: <span className="text-neutral-300">{museDeviceName}</span>
-                  </p>
-                )}
-
                 {/* Live EEG Waveform */}
                 {museStatus === "streaming" && (
-                  <div className="space-y-3">
+                  <div className="space-y-3 p-4 rounded-xl border border-neutral-800 bg-neutral-900/50">
                     <div>
-                      <p className="text-xs text-neutral-500 mb-2">Live EEG — 4 channels at 256 Hz</p>
+                      <p className="text-[11px] text-neutral-600 mb-2">Live EEG — 4 channels at 256 Hz</p>
                       <EEGWaveView
                         channelData={eegChannelData}
                         visibleSamples={512}
@@ -591,16 +564,11 @@ export default function DashboardPage() {
                         channels={["TP9", "AF7", "AF8", "TP10"]}
                       />
                     </div>
-
-                    {/* Band Powers */}
                     <div>
-                      <p className="text-xs text-neutral-500 mb-1">Band powers (hover for details)</p>
-                      <BrainStateBar
-                        powers={bandPowers}
-                        isConnected={true}
-                      />
+                      <p className="text-[11px] text-neutral-600 mb-1">Band powers</p>
+                      <BrainStateBar powers={bandPowers} isConnected={true} />
                       {!bandPowers && (
-                        <p className="text-xs text-neutral-600 mt-1">Waiting for enough samples...</p>
+                        <p className="text-[11px] text-neutral-700 mt-1">Waiting for enough samples...</p>
                       )}
                     </div>
                   </div>
@@ -611,25 +579,22 @@ export default function DashboardPage() {
         )}
 
         {activeTab === "prompts" && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-white font-semibold">System Prompts</h3>
-                <p className="text-neutral-400 text-sm mt-1">
-                  Customize how Socrates behaves. Edit any prompt below or reset to defaults.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
+              <p className="text-sm text-neutral-400">
+                Customize how Socrates behaves. Edit any prompt below or reset to defaults.
+              </p>
+              <div className="flex items-center gap-2">
                 <button
                   onClick={handleResetAllPrompts}
-                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-lg transition-colors"
+                  className="px-3 py-1.5 text-xs text-neutral-500 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-lg transition-colors"
                 >
-                  Reset all to defaults
+                  Reset all
                 </button>
                 <button
                   onClick={handleSavePrompts}
                   disabled={promptsSaving}
-                  className="px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white rounded-lg transition-colors"
+                  className="px-3.5 py-1.5 text-xs bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white rounded-lg transition-colors"
                 >
                   {promptsSaving ? "Saving..." : promptsSaved ? "Saved!" : "Save changes"}
                 </button>
@@ -642,26 +607,26 @@ export default function DashboardPage() {
               return (
                 <div
                   key={key}
-                  className="bg-neutral-900 rounded-2xl p-5 border border-neutral-800"
+                  className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4"
                 >
-                  <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-start justify-between mb-2.5">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h4 className="text-white font-medium text-sm">{meta.label}</h4>
+                        <h4 className="text-sm text-neutral-200 font-medium">{meta.label}</h4>
                         {isCustomized && (
-                          <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/20 text-blue-300">
+                          <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
                             customized
                           </span>
                         )}
                       </div>
-                      <p className="text-neutral-500 text-xs mt-0.5">{meta.description}</p>
+                      <p className="text-[11px] text-neutral-600 mt-0.5">{meta.description}</p>
                     </div>
                     {isCustomized && (
                       <button
                         onClick={() => handleResetPrompt(key)}
-                        className="text-xs text-neutral-500 hover:text-white transition-colors whitespace-nowrap"
+                        className="text-[11px] text-neutral-600 hover:text-white transition-colors whitespace-nowrap"
                       >
-                        Reset to default
+                        Reset
                       </button>
                     )}
                   </div>
@@ -675,7 +640,7 @@ export default function DashboardPage() {
                     }
                     rows={8}
                     spellCheck={false}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-sm text-neutral-200 font-mono leading-relaxed resize-y focus:outline-none focus:border-neutral-600 placeholder:text-neutral-600"
+                    className="w-full bg-[#0a0a0a] border border-neutral-800 rounded-lg p-3 text-xs text-neutral-300 font-mono leading-relaxed resize-y focus:outline-none focus:border-neutral-600 placeholder:text-neutral-700"
                   />
                 </div>
               );
@@ -702,53 +667,56 @@ function SessionCard({ session, onDelete }: { session: Session; onDelete: () => 
   const durationFormatted = formatTime(Math.floor(session.durationMs / 1000));
 
   return (
-    <div className="bg-neutral-900 rounded-2xl p-6 border border-neutral-800">
-      <div className="flex items-start justify-between gap-4">
+    <div className="group p-4 rounded-xl border border-neutral-800 bg-neutral-900/50 hover:bg-neutral-800/50 hover:border-neutral-700 transition-all duration-200">
+      <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <Link
               href={`/results?id=${session.id}`}
-              className="text-lg font-medium text-white hover:text-blue-400 transition-colors line-clamp-2"
+              className="text-[15px] font-medium text-neutral-200 group-hover:text-white transition-colors line-clamp-1"
             >
               {session.problem}
             </Link>
             {session.status === "ended_by_tutor" && (
-              <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-300">
+              <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">
                 Ended by Socrates
               </span>
             )}
           </div>
-          <p className="text-sm text-neutral-500 mt-2">
-            {new Date(session.startedAt).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </p>
+          <div className="flex items-center gap-3 mt-2 text-xs text-neutral-600">
+            <span>
+              {new Date(session.startedAt).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+            <span className="text-neutral-800">·</span>
+            <span>{durationFormatted}</span>
+            <span className="text-neutral-800">·</span>
+            <span>{stats.probeCount} probes</span>
+            {stats.avgGapScore > 0 && (
+              <>
+                <span className="text-neutral-800">·</span>
+                <span>Gap {Math.round(stats.avgGapScore * 100)}%</span>
+              </>
+            )}
+            {session.report && (
+              <>
+                <span className="text-neutral-800">·</span>
+                <span className="text-blue-500">Report</span>
+              </>
+            )}
+          </div>
         </div>
         <button
           onClick={onDelete}
-          className="p-2 text-neutral-500 hover:text-red-400 transition-colors"
+          className="p-1.5 text-neutral-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
           title="Delete session"
         >
           <TrashIcon />
         </button>
-      </div>
-
-      <div className="flex items-center gap-6 mt-4 pt-4 border-t border-neutral-800">
-        <Stat icon={<ClockIcon />} text={durationFormatted} />
-        <Stat icon={<QuestionIcon />} text={`${stats.probeCount} probes`} />
-        {stats.avgGapScore > 0 && (
-          <Stat icon={<ChartIcon />} text={`Avg gap: ${Math.round(stats.avgGapScore * 100)}%`} />
-        )}
-        {session.hasAudio && (
-          <Stat icon={<MicIcon />} text="Audio saved" className="text-green-400" />
-        )}
-        {session.report && (
-          <Stat icon={<ReportIcon />} text="Report" className="text-blue-400" />
-        )}
       </div>
     </div>
   );
@@ -756,18 +724,9 @@ function SessionCard({ session, onDelete }: { session: Session; onDelete: () => 
 
 function Stat({ icon, text, className }: { icon: React.ReactNode; text: string; className?: string }) {
   return (
-    <div className={`flex items-center gap-2 text-sm ${className || "text-neutral-400"}`}>
+    <div className={`flex items-center gap-2 text-xs ${className || "text-neutral-500"}`}>
       {icon}
       <span>{text}</span>
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-neutral-900 rounded-xl p-4 border border-neutral-800">
-      <p className="text-sm text-neutral-400">{label}</p>
-      <p className="text-2xl font-bold text-white mt-1">{value}</p>
     </div>
   );
 }
@@ -788,9 +747,9 @@ function StatusBadge({ status }: { status: string }) {
 
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
-    <div className="text-center py-16 bg-neutral-900 rounded-2xl border border-neutral-800">
-      <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
-      <p className="text-neutral-400 text-sm">{description}</p>
+    <div className="text-center py-16 rounded-xl border border-dashed border-neutral-800">
+      <p className="text-sm text-neutral-500 mb-1">{title}</p>
+      <p className="text-xs text-neutral-700">{description}</p>
     </div>
   );
 }

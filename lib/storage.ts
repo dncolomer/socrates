@@ -1,13 +1,11 @@
 // ============================================
-// STORAGE - Supabase DB + Storage
-// Sessions, probes, audio, transcripts, EEG
+// SUPABASE-ONLY SESSION STORAGE
+// All data lives in Supabase DB + Storage
 // ============================================
 
-import { generateId } from "./utils";
+import { createClient } from "@/lib/supabase/client";
 
-// ============================================
-// TYPES
-// ============================================
+// ---- Types ----
 
 export interface Probe {
   id: string;
@@ -37,100 +35,211 @@ export interface Session {
   metadata: {
     observerMode?: ObserverMode;
     frequency?: Frequency;
-    hasEeg?: boolean;
     eegSummary?: Record<string, number> | null;
   };
 }
 
-// ============================================
-// LOCAL STORAGE (used before Supabase auth)
-// After auth, these are replaced by Supabase calls
-// ============================================
+// ---- Helpers: map DB rows → Session ----
 
-const SESSIONS_KEY = "socrates-sessions";
-const CURRENT_SESSION_KEY = "socrates-current-session";
-
-export function getSessions(): Session[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const data = localStorage.getItem(SESSIONS_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function getSession(id: string): Session | null {
-  const sessions = getSessions();
-  return sessions.find((s) => s.id === id) || null;
-}
-
-export function saveSession(session: Session): void {
-  if (typeof window === "undefined") return;
-  const sessions = getSessions();
-  const existingIndex = sessions.findIndex((s) => s.id === session.id);
-  if (existingIndex >= 0) {
-    sessions[existingIndex] = session;
-  } else {
-    sessions.push(session);
-  }
-  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
-}
-
-export function deleteSession(id: string): void {
-  if (typeof window === "undefined") return;
-  const sessions = getSessions().filter((s) => s.id !== id);
-  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
-  deleteSessionAudio(id);
-}
-
-// ============================================
-// CURRENT SESSION (in-progress)
-// ============================================
-
-export function getCurrentSession(): Session | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const data = localStorage.getItem(CURRENT_SESSION_KEY);
-    return data ? JSON.parse(data) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setCurrentSession(session: Session | null): void {
-  if (typeof window === "undefined") return;
-  if (session) {
-    localStorage.setItem(CURRENT_SESSION_KEY, JSON.stringify(session));
-  } else {
-    localStorage.removeItem(CURRENT_SESSION_KEY);
-  }
-}
-
-export function createSession(problem: string): Session {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapDbSession(s: any, probes: Probe[] = []): Session {
   return {
-    id: generateId(),
-    problem,
-    startedAt: new Date().toISOString(),
-    durationMs: 0,
-    status: "active",
-    probes: [],
-    hasAudio: false,
-    metadata: {},
+    id: s.id,
+    problem: s.problem,
+    startedAt: s.created_at,
+    endedAt: s.ended_at ?? undefined,
+    durationMs: s.duration_ms || 0,
+    status: s.status || "completed",
+    probes,
+    hasAudio: !!s.audio_path,
+    audioPath: s.audio_path ?? undefined,
+    report: s.report ?? undefined,
+    reportGeneratedAt: s.report_generated_at ?? undefined,
+    metadata: s.metadata || {},
   };
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapDbProbe(p: any): Probe {
+  return {
+    id: p.id,
+    timestamp: p.timestamp_ms,
+    gapScore: p.gap_score,
+    signals: p.signals || [],
+    text: p.text,
+    expandedText: p.expanded_text ?? undefined,
+  };
+}
+
+// ---- Session CRUD ----
+
+export async function createSession(problem: string): Promise<Session> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .insert({ user_id: user.id, problem, status: "active" })
+    .select()
+    .single();
+
+  if (error || !data) throw new Error(error?.message || "Failed to create session");
+  return mapDbSession(data);
+}
+
+export async function getSession(id: string): Promise<Session | null> {
+  const supabase = createClient();
+
+  const { data: sessionRow } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (!sessionRow) return null;
+
+  const { data: probeRows } = await supabase
+    .from("probes")
+    .select("*")
+    .eq("session_id", id)
+    .order("timestamp_ms", { ascending: true });
+
+  return mapDbSession(sessionRow, (probeRows || []).map(mapDbProbe));
+}
+
+export async function getSessions(): Promise<Session[]> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: sessionRows } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (!sessionRows) return [];
+
+  // Batch-load all probes for these sessions
+  const sessionIds = sessionRows.map((s) => s.id);
+  const { data: allProbes } = await supabase
+    .from("probes")
+    .select("*")
+    .in("session_id", sessionIds)
+    .order("timestamp_ms", { ascending: true });
+
+  const probesBySession = new Map<string, Probe[]>();
+  for (const p of allProbes || []) {
+    const mapped = mapDbProbe(p);
+    const existing = probesBySession.get(p.session_id) || [];
+    existing.push(mapped);
+    probesBySession.set(p.session_id, existing);
+  }
+
+  return sessionRows.map((s) => mapDbSession(s, probesBySession.get(s.id) || []));
+}
+
+export async function saveSession(session: Session): Promise<void> {
+  const supabase = createClient();
+
+  await supabase
+    .from("sessions")
+    .update({
+      problem: session.problem,
+      status: session.status,
+      duration_ms: session.durationMs,
+      ended_at: session.endedAt || null,
+      audio_path: session.audioPath || null,
+      report: session.report || null,
+      report_generated_at: session.reportGeneratedAt || null,
+      metadata: session.metadata,
+    })
+    .eq("id", session.id);
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  // Delete audio from Storage
+  const { data: sessionRow } = await supabase
+    .from("sessions")
+    .select("audio_path")
+    .eq("id", id)
+    .single();
+
+  if (sessionRow?.audio_path) {
+    await supabase.storage.from("session-audio").remove([sessionRow.audio_path]);
+  }
+
+  // Delete EEG data from Storage
+  const { data: eegRows } = await supabase
+    .from("session_eeg_data")
+    .select("data_path")
+    .eq("session_id", id);
+
+  if (eegRows && eegRows.length > 0) {
+    await supabase.storage
+      .from("session-eeg")
+      .remove(eegRows.map((r) => r.data_path));
+  }
+
+  // Cascade delete handles probes, eeg rows
+  await supabase.from("sessions").delete().eq("id", id);
+}
+
+// ---- Probe CRUD ----
+
+export async function addProbe(
+  sessionId: string,
+  probe: Omit<Probe, "id">
+): Promise<Probe> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("probes")
+    .insert({
+      session_id: sessionId,
+      timestamp_ms: probe.timestamp,
+      gap_score: probe.gapScore,
+      signals: probe.signals,
+      text: probe.text,
+      expanded_text: probe.expandedText || null,
+    })
+    .select()
+    .single();
+
+  if (error || !data) throw new Error(error?.message || "Failed to insert probe");
+  return mapDbProbe(data);
+}
+
+export async function updateProbeExpanded(probeId: string, expandedText: string): Promise<void> {
+  const supabase = createClient();
+  await supabase
+    .from("probes")
+    .update({ expanded_text: expandedText })
+    .eq("id", probeId);
+}
+
+// ---- In-memory session helpers (for active recording) ----
 
 export function addProbeToSession(
   session: Session,
-  probe: Omit<Probe, "id">
+  probe: Probe
 ): Session {
   return {
     ...session,
-    probes: [...session.probes, { ...probe, id: generateId() }],
+    probes: [...session.probes, probe],
   };
 }
 
-export function endSession(session: Session, durationMs: number, status: SessionStatus = "completed"): Session {
+export function endSession(
+  session: Session,
+  durationMs: number,
+  status: SessionStatus = "completed"
+): Session {
   return {
     ...session,
     endedAt: new Date().toISOString(),
@@ -139,84 +248,101 @@ export function endSession(session: Session, durationMs: number, status: Session
   };
 }
 
-// ============================================
-// AUDIO STORAGE (IndexedDB - fallback before Supabase)
-// ============================================
+// ---- Audio Storage ----
 
-const DB_NAME = "socrates-audio";
-const DB_VERSION = 1;
-const STORE_NAME = "audio";
+export async function saveSessionAudio(
+  sessionId: string,
+  audioBlob: Blob
+): Promise<string> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
 
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "sessionId" });
-      }
-    };
-  });
-}
+  const path = `${user.id}/${sessionId}.webm`;
 
-export async function saveSessionAudio(sessionId: string, audioBlob: Blob): Promise<void> {
-  try {
-    const db = await openDB();
-    const transaction = db.transaction(STORE_NAME, "readwrite");
-    const store = transaction.objectStore(STORE_NAME);
-    await new Promise<void>((resolve, reject) => {
-      const request = store.put({ sessionId, audio: audioBlob });
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+  const { error } = await supabase.storage
+    .from("session-audio")
+    .upload(path, audioBlob, {
+      contentType: "audio/webm",
+      upsert: true,
     });
-    db.close();
-  } catch (error) {
-    console.error("Failed to save audio:", error);
-    throw error;
-  }
+
+  if (error) throw new Error(error.message);
+
+  // Update session with audio path
+  await supabase
+    .from("sessions")
+    .update({ audio_path: path })
+    .eq("id", sessionId);
+
+  return path;
 }
 
 export async function getSessionAudio(sessionId: string): Promise<Blob | null> {
-  try {
-    const db = await openDB();
-    const transaction = db.transaction(STORE_NAME, "readonly");
-    const store = transaction.objectStore(STORE_NAME);
-    const result = await new Promise<{ sessionId: string; audio: Blob } | undefined>(
-      (resolve, reject) => {
-        const request = store.get(sessionId);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      }
-    );
-    db.close();
-    return result?.audio || null;
-  } catch (error) {
-    console.error("Failed to get audio:", error);
-    return null;
+  const supabase = createClient();
+
+  const { data: sessionRow } = await supabase
+    .from("sessions")
+    .select("audio_path")
+    .eq("id", sessionId)
+    .single();
+
+  if (!sessionRow?.audio_path) return null;
+
+  const { data, error } = await supabase.storage
+    .from("session-audio")
+    .download(sessionRow.audio_path);
+
+  if (error || !data) return null;
+  return data;
+}
+
+// ---- EEG Storage ----
+
+export async function saveSessionEEG(
+  sessionId: string,
+  eegData: { channels: Record<string, number[]>; bandPowers: Record<string, number> | null },
+  deviceName?: string
+): Promise<void> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const path = `${user.id}/${sessionId}_eeg.json`;
+  const blob = new Blob([JSON.stringify(eegData)], { type: "application/json" });
+
+  await supabase.storage
+    .from("session-eeg")
+    .upload(path, blob, { contentType: "application/json", upsert: true });
+
+  const sampleCount = Object.values(eegData.channels)[0]?.length || 0;
+
+  await supabase.from("session_eeg_data").insert({
+    session_id: sessionId,
+    user_id: user.id,
+    device_name: deviceName || null,
+    data_path: path,
+    sample_count: sampleCount,
+    avg_band_powers: eegData.bandPowers,
+  });
+
+  // Also save summary into session metadata
+  if (eegData.bandPowers) {
+    const { data: sessionRow } = await supabase
+      .from("sessions")
+      .select("metadata")
+      .eq("id", sessionId)
+      .single();
+
+    const existingMeta = sessionRow?.metadata || {};
+    await supabase
+      .from("sessions")
+      .update({ metadata: { ...existingMeta, eegSummary: eegData.bandPowers } })
+      .eq("id", sessionId);
   }
 }
 
-export async function deleteSessionAudio(sessionId: string): Promise<void> {
-  try {
-    const db = await openDB();
-    const transaction = db.transaction(STORE_NAME, "readwrite");
-    const store = transaction.objectStore(STORE_NAME);
-    await new Promise<void>((resolve, reject) => {
-      const request = store.delete(sessionId);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-    db.close();
-  } catch (error) {
-    console.error("Failed to delete audio:", error);
-  }
-}
-
-// ============================================
-// ANALYTICS HELPERS
-// ============================================
+// ---- Analytics Helpers ----
 
 export function getSessionStats(session: Session) {
   const probeCount = session.probes.length;
@@ -228,7 +354,7 @@ export function getSessionStats(session: Session) {
   const durationMinutes = Math.round(session.durationMs / 60000);
   const probesPerMinute = durationMinutes > 0 ? probeCount / durationMinutes : 0;
 
-  const peakGap = session.probes.reduce(
+  const peakProbe = session.probes.reduce(
     (max, p) => (p.gapScore > max.gapScore ? p : max),
     { gapScore: 0 } as Probe
   );
@@ -238,7 +364,7 @@ export function getSessionStats(session: Session) {
     avgGapScore: Math.round(avgGapScore * 100) / 100,
     durationMinutes,
     probesPerMinute: Math.round(probesPerMinute * 10) / 10,
-    peakGapScore: peakGap.gapScore,
-    peakGapTime: peakGap.timestamp,
+    peakGapScore: peakProbe.gapScore,
+    peakGapTime: peakProbe.timestamp,
   };
 }

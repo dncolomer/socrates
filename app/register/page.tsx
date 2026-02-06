@@ -43,23 +43,23 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col">
-      <header className="border-b border-neutral-800 px-6 py-4">
-        <div className="max-w-4xl mx-auto">
-          <Link href="/" className="text-xl font-bold text-white">
+    <main className="min-h-screen flex flex-col bg-[#0a0a0a]">
+      <header className="border-b border-neutral-800/60 px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto">
+          <Link href="/" className="text-lg font-semibold text-white tracking-tight">
             Socrates
           </Link>
         </div>
       </header>
 
       <div className="flex-1 flex items-center justify-center px-6">
-        <div className="w-full max-w-md">
-          <h2 className="text-2xl font-bold text-white mb-2">Create an account</h2>
-          <p className="text-neutral-400 mb-8">Start your Socratic learning journey.</p>
+        <div className="w-full max-w-sm">
+          <h2 className="text-xl font-semibold text-white mb-1">Create an account</h2>
+          <p className="text-sm text-neutral-500 mb-8">Start your Socratic learning journey.</p>
 
-          <form onSubmit={handleRegister} className="space-y-4">
+          <form onSubmit={handleRegister} className="space-y-3.5">
             <div>
-              <label htmlFor="username" className="block text-sm text-neutral-300 mb-1">
+              <label htmlFor="username" className="block text-[11px] text-neutral-500 uppercase tracking-wider mb-1.5">
                 Username
               </label>
               <input
@@ -68,13 +68,13 @@ export default function RegisterPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="socrates42"
-                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-white placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-3.5 py-2.5 bg-neutral-900/80 border border-neutral-800 rounded-xl text-white text-sm placeholder-neutral-700 focus:outline-none focus:border-neutral-600 transition-colors"
                 required
               />
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm text-neutral-300 mb-1">
+              <label htmlFor="email" className="block text-[11px] text-neutral-500 uppercase tracking-wider mb-1.5">
                 Email
               </label>
               <input
@@ -82,13 +82,13 @@ export default function RegisterPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-3.5 py-2.5 bg-neutral-900/80 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-neutral-600 transition-colors"
                 required
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm text-neutral-300 mb-1">
+              <label htmlFor="password" className="block text-[11px] text-neutral-500 uppercase tracking-wider mb-1.5">
                 Password
               </label>
               <input
@@ -96,14 +96,14 @@ export default function RegisterPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-3.5 py-2.5 bg-neutral-900/80 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-neutral-600 transition-colors"
                 minLength={6}
                 required
               />
             </div>
 
             {error && (
-              <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-sm">
+              <div className="p-3 bg-red-500/5 border border-red-500/20 rounded-xl text-red-400 text-xs">
                 {error}
               </div>
             )}
@@ -111,15 +111,15 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 text-white font-semibold rounded-xl transition-colors"
+              className="w-full py-2.5 bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-black text-sm font-medium rounded-xl transition-colors mt-2"
             >
               {loading ? "Creating account..." : "Create Account"}
             </button>
           </form>
 
-          <p className="text-center text-sm text-neutral-500 mt-6">
+          <p className="text-center text-xs text-neutral-600 mt-6">
             Already have an account?{" "}
-            <Link href="/login" className="text-blue-400 hover:text-blue-300 transition-colors">
+            <Link href="/login" className="text-neutral-400 hover:text-white transition-colors">
               Sign in
             </Link>
           </p>
