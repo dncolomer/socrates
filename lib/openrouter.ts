@@ -1,0 +1,586 @@
+// ============================================
+// OPENROUTER CLIENT FOR SOCRATES
+// Socratic gap analysis + probe generation
+// ============================================
+
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const MODEL = "google/gemini-2.5-flash"; // Fast model with audio support
+
+// ============================================
+// DEFAULT PROMPTS (exported for user customization)
+// ============================================
+
+export const DEFAULT_PROMPTS = {
+  gap_detection: `Analyze this audio for gaps in reasoning while the student works through a problem.
+
+Problem being worked on: {problem}
+
+Listen for gaps such as:
+- Hesitations, long pauses, trailing off mid-thought
+- Unexamined assumptions taken for granted
+- Contradictions or inconsistencies in reasoning
+- Circular thinking or going in loops
+- Skipping steps or jumping to conclusions
+- Confusion markers ("I don't know", "wait", "hmm", going in circles)
+
+Rate the gap level from 0.0 to 1.0 where:
+- 0.0-0.3: Confident, flowing reasoning process
+- 0.4-0.6: Some hesitation, minor gaps in reasoning
+- 0.7-1.0: Clear gaps, contradictions, or stuck thinking
+
+Return ONLY valid JSON with this structure:
+{"gap_score": <float 0.0-1.0>, "signals": ["signal1", "signal2"]}
+
+Be concise with signals - max 3 items. Use categories like: "hesitation", "unexamined assumption", "contradiction", "circular reasoning", "skipped step", "confusion".`,
+
+  opening_probe: `You are Socrates. A student is about to think aloud about a topic. Your role is to open with a single Socratic question that draws out what they already believe or understand, so their reasoning has a concrete starting point.
+
+Topic the student wants to explore: {problem}
+
+Generate ONE opening Socratic question. Follow these rules strictly:
+- Use the Socratic method: ask what they think they already know, or ask them to explain a foundational concept in their own words.
+- Good patterns: "What do you think X actually means?", "If you had to explain X to a friend, where would you start?", "What's the simplest example of X you can think of?"
+- The question must be directly about the TOPIC, not about their "approach" or "assumptions" in the abstract.
+- Keep it warm, short (max 20 words), and genuinely curious.
+- ONLY output the question. No preamble, no quotes, no formatting.`,
+
+  probe_generation: `You are a Socratic observer watching someone work through a problem.
+
+Problem they're working on: {problem}
+
+A gap in their reasoning was detected (gap score: {score}, signals: {signals}).
+
+{rag_context}
+
+Previous probes already asked (don't repeat these):
+{previous_probes}
+
+Generate ONE probing question to stimulate deeper thinking. Rules:
+- ONLY ask a question. Never give answers, hints, or suggestions.
+- Target the specific gap detected (assumption, contradiction, etc.)
+- Keep it short (1 sentence, max 20 words).
+- Make it feel like a natural thought the student might have themselves.
+- Be genuinely curious, not leading or rhetorical.
+
+Return ONLY the question text, no JSON or formatting.`,
+
+  session_end_check: `Based on this Socratic tutoring session so far:
+- Duration: {elapsed}
+- Probes triggered: {count}
+- Recent gap scores: {recent_scores}
+- Problem: {problem}
+
+Should this session end? Return ONLY valid JSON:
+{"should_end": true/false, "reason": "brief reason"}
+
+End the session if:
+- The student has been stuck for a long time with no improvement (gap scores not decreasing)
+- The session has been very long (>30 min) and gaps are increasing
+- The student seems to have resolved the problem (consistently low gap scores for several checks)
+
+Otherwise, keep going.`,
+
+  report_generation: `You are reviewing a Socratic tutoring session.
+
+Problem: {problem}
+Duration: {duration}
+Number of probes triggered: {count}
+Average gap score: {avg_gap}
+Probes and their gap signals:
+{probes_summary}
+
+{eeg_context}
+
+Generate a structured report (markdown) covering:
+1. **Session Overview** - brief summary of what happened
+2. **Key Gaps Identified** - the main reasoning gaps detected
+3. **Progress Arc** - how the student's thinking evolved (did gaps decrease over time?)
+4. **Strengths** - what the student did well
+5. **Areas to Improve** - specific recommendations for next session
+6. **Suggested Next Steps** - 2-3 concrete things to practice
+
+Keep it encouraging but honest. 300-500 words.`,
+
+  expand_probe: `The student engaged with this Socratic question while working on a problem:
+
+Problem: {problem}
+Original question: "{probe}"
+
+They clicked on the question wanting to go deeper. Generate 2-3 follow-up probing questions that dig into the same reasoning gap.
+
+Rules:
+- ONLY ask questions. Never give answers, hints, or suggestions.
+- Each question should probe a different angle of the same gap.
+- Keep each question to 1 sentence.
+- Make them progressively deeper.
+
+Return the questions as a numbered list, nothing else.`,
+} as const;
+
+export type PromptKey = keyof typeof DEFAULT_PROMPTS;
+
+export type UserPrompts = Partial<Record<PromptKey, string>>;
+
+/** Get the effective prompt: user override if set, otherwise default */
+function getPrompt(key: PromptKey, overrides?: UserPrompts): string {
+  return overrides?.[key] || DEFAULT_PROMPTS[key];
+}
+
+// ============================================
+// Prompt metadata (labels + descriptions for the UI)
+// ============================================
+
+export const PROMPT_META: Record<PromptKey, { label: string; description: string }> = {
+  gap_detection: {
+    label: "Gap Detection",
+    description: "Analyzes audio to detect reasoning gaps. Variables: {problem}",
+  },
+  opening_probe: {
+    label: "Opening Question",
+    description: "First Socratic question when a session starts. Variables: {problem}",
+  },
+  probe_generation: {
+    label: "Probe Generation",
+    description: "Generates probes during the session. Variables: {problem}, {score}, {signals}, {rag_context}, {previous_probes}",
+  },
+  session_end_check: {
+    label: "Session End Check",
+    description: "Decides if the session should end. Variables: {elapsed}, {count}, {recent_scores}, {problem}",
+  },
+  report_generation: {
+    label: "Session Report",
+    description: "Generates the post-session report. Variables: {problem}, {duration}, {count}, {avg_gap}, {probes_summary}, {eeg_context}",
+  },
+  expand_probe: {
+    label: "Expand Probe",
+    description: "Generates follow-up questions when user clicks 'Go deeper'. Variables: {problem}, {probe}",
+  },
+};
+
+// ============================================
+// GAP DETECTION
+// ============================================
+
+export interface GapAnalysisResult {
+  gap_score: number;
+  signals: string[];
+}
+
+export interface AnalyzeGapOptions {
+  audioBase64: string;
+  audioFormat: string;
+  problem: string;
+  promptOverrides?: UserPrompts;
+}
+
+export async function analyzeGap(
+  options: AnalyzeGapOptions
+): Promise<{ success: boolean; result?: GapAnalysisResult; error?: string }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey) {
+    return { success: false, error: "OPENROUTER_API_KEY not configured" };
+  }
+
+  const prompt = getPrompt("gap_detection", options.promptOverrides)
+    .replace("{problem}", options.problem);
+
+  try {
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "Socrates",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              {
+                type: "file",
+                file: {
+                  filename: `audio.${options.audioFormat}`,
+                  file_data: `data:audio/${options.audioFormat};base64,${options.audioBase64}`,
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 200,
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OpenRouter API error:", response.status, errorText);
+      return { success: false, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      return { success: false, error: "No content in response" };
+    }
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return { success: false, error: "No JSON in response" };
+    }
+
+    const result = JSON.parse(jsonMatch[0]) as GapAnalysisResult;
+    result.gap_score = Math.max(0, Math.min(1, result.gap_score || 0));
+    result.signals = result.signals || [];
+
+    return { success: true, result };
+  } catch (error) {
+    console.error("Gap analysis failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// ============================================
+// OPENING PROBE (Session Kickoff Question)
+// ============================================
+
+export async function generateOpeningProbe(
+  problem: string,
+  promptOverrides?: UserPrompts
+): Promise<{ success: boolean; probe?: string; error?: string }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey) {
+    return { success: false, error: "OPENROUTER_API_KEY not configured" };
+  }
+
+  const prompt = getPrompt("opening_probe", promptOverrides)
+    .replace("{problem}", problem);
+
+  try {
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "Socrates",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 100,
+        temperature: 0.8,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OpenRouter API error:", response.status, errorText);
+      return { success: false, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const probe = data.choices?.[0]?.message?.content?.trim();
+
+    if (!probe) {
+      return { success: false, error: "No opening probe generated" };
+    }
+
+    return { success: true, probe };
+  } catch (error) {
+    console.error("Opening probe generation failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// ============================================
+// PROBE GENERATION (Socratic Questions Only)
+// ============================================
+
+export interface GenerateProbeOptions {
+  problem: string;
+  gapScore: number;
+  signals: string[];
+  previousProbes: string[];
+  ragContext?: string;
+  audioBase64?: string;
+  audioFormat?: string;
+  promptOverrides?: UserPrompts;
+}
+
+export async function generateProbe(
+  options: GenerateProbeOptions
+): Promise<{ success: boolean; probe?: string; error?: string }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey) {
+    return { success: false, error: "OPENROUTER_API_KEY not configured" };
+  }
+
+  const prompt = getPrompt("probe_generation", options.promptOverrides)
+    .replace("{problem}", options.problem)
+    .replace("{score}", options.gapScore.toFixed(2))
+    .replace("{signals}", options.signals.join(", ") || "general hesitation")
+    .replace(
+      "{previous_probes}",
+      options.previousProbes.length > 0
+        ? options.previousProbes.map((p, i) => `${i + 1}. ${p}`).join("\n")
+        : "None yet"
+    )
+    .replace(
+      "{rag_context}",
+      options.ragContext
+        ? `Context from this student's past think-aloud sessions:\n---\n${options.ragContext}\n---\n`
+        : ""
+    );
+
+  try {
+    const content: Array<{ type: string; text?: string; file?: { filename: string; file_data: string } }> = [
+      { type: "text", text: prompt },
+    ];
+
+    if (options.audioBase64 && options.audioFormat) {
+      content.push({
+        type: "file",
+        file: {
+          filename: `context.${options.audioFormat}`,
+          file_data: `data:audio/${options.audioFormat};base64,${options.audioBase64}`,
+        },
+      });
+    }
+
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "Socrates",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{ role: "user", content }],
+        max_tokens: 150,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OpenRouter API error:", response.status, errorText);
+      return { success: false, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const probe = data.choices?.[0]?.message?.content?.trim();
+
+    if (!probe) {
+      return { success: false, error: "No probe generated" };
+    }
+
+    return { success: true, probe };
+  } catch (error) {
+    console.error("Probe generation failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// ============================================
+// SESSION END CHECK (Tutor-Initiated)
+// ============================================
+
+export interface SessionEndCheckResult {
+  should_end: boolean;
+  reason: string;
+}
+
+export async function checkSessionEnd(options: {
+  elapsed: string;
+  probeCount: number;
+  recentScores: number[];
+  problem: string;
+  promptOverrides?: UserPrompts;
+}): Promise<{ success: boolean; result?: SessionEndCheckResult; error?: string }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey) {
+    return { success: false, error: "OPENROUTER_API_KEY not configured" };
+  }
+
+  const prompt = getPrompt("session_end_check", options.promptOverrides)
+    .replace("{elapsed}", options.elapsed)
+    .replace("{count}", options.probeCount.toString())
+    .replace("{recent_scores}", options.recentScores.map(s => s.toFixed(2)).join(", ") || "none yet")
+    .replace("{problem}", options.problem);
+
+  try {
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "Socrates",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 100,
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      return { success: false, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return { success: false, error: "No content" };
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { success: false, error: "No JSON" };
+
+    const result = JSON.parse(jsonMatch[0]) as SessionEndCheckResult;
+    return { success: true, result };
+  } catch (error) {
+    console.error("Session end check failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+// ============================================
+// REPORT GENERATION
+// ============================================
+
+export async function generateReport(options: {
+  problem: string;
+  duration: string;
+  probeCount: number;
+  avgGapScore: number;
+  probesSummary: string;
+  eegContext?: string;
+  promptOverrides?: UserPrompts;
+}): Promise<{ success: boolean; report?: string; error?: string }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey) {
+    return { success: false, error: "OPENROUTER_API_KEY not configured" };
+  }
+
+  const prompt = getPrompt("report_generation", options.promptOverrides)
+    .replace("{problem}", options.problem)
+    .replace("{duration}", options.duration)
+    .replace("{count}", options.probeCount.toString())
+    .replace("{avg_gap}", options.avgGapScore.toFixed(2))
+    .replace("{probes_summary}", options.probesSummary || "No probes triggered")
+    .replace(
+      "{eeg_context}",
+      options.eegContext
+        ? `EEG Data Summary:\n${options.eegContext}\n\nInclude observations about the student's brain state patterns and how they correlated with reasoning gaps.`
+        : ""
+    );
+
+  try {
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "Socrates",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 1500,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      return { success: false, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const report = data.choices?.[0]?.message?.content?.trim();
+
+    if (!report) {
+      return { success: false, error: "No report generated" };
+    }
+
+    return { success: true, report };
+  } catch (error) {
+    console.error("Report generation failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+// ============================================
+// EXPAND PROBE
+// ============================================
+
+export async function expandProbe(options: {
+  problem: string;
+  probe: string;
+  promptOverrides?: UserPrompts;
+}): Promise<{ success: boolean; expanded?: string; error?: string }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey) {
+    return { success: false, error: "OPENROUTER_API_KEY not configured" };
+  }
+
+  const prompt = getPrompt("expand_probe", options.promptOverrides)
+    .replace("{problem}", options.problem)
+    .replace("{probe}", options.probe);
+
+  try {
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "Socrates",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 300,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      return { success: false, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const expanded = data.choices?.[0]?.message?.content?.trim();
+
+    if (!expanded) {
+      return { success: false, error: "No expansion generated" };
+    }
+
+    return { success: true, expanded };
+  } catch (error) {
+    console.error("Expand probe failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
