@@ -387,6 +387,9 @@ export default function DashboardPage() {
             <Link href="/pricing" className="text-sm text-neutral-500 hover:text-white transition-colors">
               Pricing
             </Link>
+            <Link href="/coaching" className="text-sm text-neutral-500 hover:text-white transition-colors">
+              Coaching
+            </Link>
             {user && (
               <span className="text-sm text-neutral-500">
                 {user.username || user.email}

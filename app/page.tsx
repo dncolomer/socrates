@@ -33,6 +33,9 @@ export default function Home() {
             <Link href="/pricing" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
               Pricing
             </Link>
+            <Link href="/coaching" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
+              Coaching
+            </Link>
             <Link href="/dashboard" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
               Dashboard
             </Link>

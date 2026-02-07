@@ -179,6 +179,9 @@ function ResultsContent() {
             <span className="text-[10px] text-neutral-600 font-medium uppercase tracking-widest hidden sm:inline">Results</span>
           </div>
           <div className="flex items-center gap-3 sm:gap-4">
+            <Link href="/coaching" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
+              Coaching
+            </Link>
             <Link href="/dashboard" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
               Dashboard
             </Link>

@@ -81,6 +81,9 @@ export default function PricingPage() {
             <Link href="/" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
               Home
             </Link>
+            <Link href="/coaching" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
+              Coaching
+            </Link>
             <Link href="/dashboard" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
               Dashboard
             </Link>
