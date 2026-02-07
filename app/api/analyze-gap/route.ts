@@ -31,8 +31,9 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      gap_score: result.result!.gap_score,
+      gapScore: result.result!.gap_score,
       signals: result.result!.signals,
+      transcript: result.result!.transcript || "",
     });
   } catch (error) {
     console.error("Analyze gap error:", error);

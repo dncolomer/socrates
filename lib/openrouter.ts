@@ -29,7 +29,7 @@ Rate the gap level from 0.0 to 1.0 where:
 - 0.7-1.0: Clear gaps, contradictions, or stuck thinking
 
 Return ONLY valid JSON with this structure:
-{"gap_score": <float 0.0-1.0>, "signals": ["signal1", "signal2"]}
+{"gap_score": <float 0.0-1.0>, "signals": ["signal1", "signal2"], "transcript": "brief summary of what the student said"}
 
 Be concise with signals - max 3 items. Use categories like: "hesitation", "unexamined assumption", "contradiction", "circular reasoning", "skipped step", "confusion".`,
 
@@ -164,6 +164,7 @@ export const PROMPT_META: Record<PromptKey, { label: string; description: string
 export interface GapAnalysisResult {
   gap_score: number;
   signals: string[];
+  transcript?: string;
 }
 
 export interface AnalyzeGapOptions {
@@ -237,6 +238,7 @@ export async function analyzeGap(
     const result = JSON.parse(jsonMatch[0]) as GapAnalysisResult;
     result.gap_score = Math.max(0, Math.min(1, result.gap_score || 0));
     result.signals = result.signals || [];
+    result.transcript = result.transcript || "";
 
     return { success: true, result };
   } catch (error) {

@@ -346,6 +346,82 @@ export function SessionView({ sessionId }: { sessionId: string }) {
     muteTimerRef.current = setTimeout(() => { setIsMuted(false); setMuteRemaining(0); }, durationMs);
   };
 
+  const [forcingProbe, setForcingProbe] = useState(false);
+
+  const handleForceProbe = useCallback(async () => {
+    const recorder = recorderRef.current;
+    const currentSession = sessionRef.current;
+    if (!recorder || !currentSession || forcingProbe) return;
+
+    setForcingProbe(true);
+    try {
+      // Get recent audio for transcript context
+      const recentAudio = recorder.getRecentAudio(15000);
+      let transcript = "";
+
+      if (recentAudio && recentAudio.size > 1000) {
+        const audioBase64 = await blobToBase64(recentAudio);
+        const audioFormat = recorder.getAudioFormat();
+        const gapRes = await fetch("/api/analyze-gap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ audioBase64, audioFormat, problem: currentSession.problem }),
+        });
+        if (gapRes.ok) {
+          const gapData = await gapRes.json();
+          transcript = gapData.transcript || "";
+        }
+      }
+
+      // Force a probe regardless of gap score
+      const probeRes = await fetch("/api/generate-probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          problem: currentSession.problem,
+          transcript,
+          gapScore: 1.0,
+          signals: ["user_requested"],
+          previousProbes: currentSession.probes.map((p) => p.text),
+        }),
+      });
+
+      if (probeRes.ok) {
+        const { probe: probeText } = await probeRes.json();
+        const savedProbe = await addProbe(currentSession.id, {
+          timestamp: Date.now() - new Date(currentSession.startedAt).getTime(),
+          gapScore: 1.0,
+          signals: ["user_requested"],
+          text: probeText,
+        });
+        const updatedSession = addProbeToSession(currentSession, savedProbe);
+        setSession(updatedSession);
+        sessionRef.current = updatedSession;
+        setActiveProbe(savedProbe);
+        lastProbeTimeRef.current = Date.now();
+      }
+    } catch (err) {
+      console.error("Force probe error:", err);
+    } finally {
+      setForcingProbe(false);
+    }
+  }, [forcingProbe]);
+
+  // Spacebar shortcut to force a probe
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only when recording, and not typing in an input/textarea
+      if (!isRecording) return;
+      if (e.code !== "Space") return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      e.preventDefault();
+      handleForceProbe();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isRecording, handleForceProbe]);
+
   const handleConfirmEnd = async () => {
     setShowEndDialog(false);
     if (session) {
@@ -541,8 +617,8 @@ export function SessionView({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
-          {/* Start / Stop */}
-          <div className="flex gap-4">
+          {/* Start / Stop + Nudge Tutor */}
+          <div className="flex gap-3">
             {!isRecording ? (
               <button
                 onClick={startRecording}
@@ -552,13 +628,29 @@ export function SessionView({ sessionId }: { sessionId: string }) {
                 Start Session
               </button>
             ) : (
-              <button
-                onClick={stopRecording}
-                className="flex-1 py-3.5 bg-red-600/80 hover:bg-red-500 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
-              >
-                <StopIcon />
-                End Session
-              </button>
+              <>
+                <button
+                  onClick={handleForceProbe}
+                  disabled={forcingProbe}
+                  className="flex-1 py-3.5 bg-blue-600/80 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+                  title="Press Space to nudge the tutor"
+                >
+                  {forcingProbe ? (
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="31.4 31.4" strokeLinecap="round" /></svg>
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  )}
+                  Nudge Tutor
+                  <kbd className="ml-1 px-1.5 py-0.5 text-[10px] bg-blue-700/50 rounded border border-blue-500/30 font-mono">Space</kbd>
+                </button>
+                <button
+                  onClick={stopRecording}
+                  className="flex-1 py-3.5 bg-red-600/80 hover:bg-red-500 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+                >
+                  <StopIcon />
+                  End Session
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -584,7 +676,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
               {/* Controls explained */}
               <div className="mt-5 pt-4 border-t border-neutral-800/60">
                 <h4 className="text-xs font-medium text-neutral-400 mb-3">Your controls during the session</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Tutor mode */}
                   <div className="p-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
                     <p className="text-xs font-medium text-neutral-300 mb-1.5">Tutor mode</p>
@@ -629,6 +721,15 @@ export function SessionView({ sessionId }: { sessionId: string }) {
                     <div className="flex items-start gap-2">
                       <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
                       <p className="text-[11px] text-neutral-500">Silences the tutor for 10 minutes so you can think without interruptions. A countdown shows how long until it comes back.</p>
+                    </div>
+                  </div>
+
+                  {/* Nudge Tutor */}
+                  <div className="p-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
+                    <p className="text-xs font-medium text-neutral-300 mb-1.5">Nudge Tutor</p>
+                    <div className="flex items-start gap-2">
+                      <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      <p className="text-[11px] text-neutral-500">Prompts the tutor to jump in with a follow-up question right now. Use the button or press <kbd className="px-1 py-0.5 text-[10px] bg-neutral-700/60 rounded border border-neutral-600/40 font-mono text-neutral-400">Space</kbd> on your keyboard.</p>
                     </div>
                   </div>
                 </div>
