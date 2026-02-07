@@ -4,11 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2026-01-28.clover",
-});
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: "2026-01-28.clover",
+  });
+}
 
 export async function POST(request: NextRequest) {
+  const stripe = getStripe();
   try {
     const supabase = await createClient();
     const {
