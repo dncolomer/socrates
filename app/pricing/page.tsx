@@ -130,8 +130,17 @@ export default function PricingPage() {
               ))}
             </ul>
             {isCurrentPlan("free") ? (
-              <div className="w-full py-2.5 text-center text-xs text-neutral-600 border border-neutral-800 rounded-xl">
-                Current plan
+              <div className="flex flex-col gap-2">
+                <div className="w-full py-2.5 text-center text-xs text-neutral-600 border border-neutral-800 rounded-xl">
+                  Current plan
+                </div>
+                <button
+                  onClick={() => handleCheckout("extra_lesson")}
+                  disabled={loadingPlan === "extra_lesson"}
+                  className="w-full py-2.5 text-center text-xs text-neutral-400 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-xl transition-colors"
+                >
+                  {loadingPlan === "extra_lesson" ? "Loading..." : "Buy extra session — $1.99"}
+                </button>
               </div>
             ) : !user?.authenticated ? (
               <Link
