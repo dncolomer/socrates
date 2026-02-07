@@ -25,13 +25,14 @@ export async function POST() {
     const baseLimit = PLANS[plan]?.sessionsPerPeriod ?? 1;
     const extraLessons = profile.extra_lessons ?? 0;
 
-    // Count sessions
+    // Count completed sessions (exclude unstarted "active" ones)
     let sessionCount = 0;
     if (plan === "free") {
       const { count } = await supabase
         .from("sessions")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .neq("status", "active");
       sessionCount = count ?? 0;
     } else {
       // For paid plans, we don't decrement extras here (handled by billing cycle reset)
@@ -78,15 +79,15 @@ export async function GET() {
     let sessionCount = 0;
 
     if (profile.plan === "free" || !profile.current_period_end) {
-      // Free plan: count ALL sessions ever
+      // Free plan: count ALL completed sessions ever (exclude unstarted "active" ones)
       const { count } = await supabase
         .from("sessions")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .neq("status", "active");
       sessionCount = count ?? 0;
     } else {
-      // Paid plan: count sessions since current_period_end minus ~30 days
-      // We approximate billing period start as current_period_end minus 30 days
+      // Paid plan: count completed sessions since current_period_end minus ~30 days
       const periodEnd = new Date(profile.current_period_end);
       const periodStart = new Date(periodEnd);
       periodStart.setDate(periodStart.getDate() - 30);
@@ -95,6 +96,7 @@ export async function GET() {
         .from("sessions")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
+        .neq("status", "active")
         .gte("created_at", periodStart.toISOString());
       sessionCount = count ?? 0;
     }

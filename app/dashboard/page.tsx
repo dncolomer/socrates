@@ -721,11 +721,16 @@ function SessionCard({ session, onDelete }: { session: Session; onDelete: () => 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <Link
-              href={`/results?id=${session.id}`}
+              href={session.status === "active" ? `/session?id=${session.id}` : `/results?id=${session.id}`}
               className="text-[15px] font-medium text-neutral-200 group-hover:text-white transition-colors line-clamp-1"
             >
               {session.problem}
             </Link>
+            {session.status === "active" && (
+              <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                Resume
+              </span>
+            )}
             {session.status === "ended_by_tutor" && (
               <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">
                 Ended by Socrates
