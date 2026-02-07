@@ -2,8 +2,8 @@ import Link from "next/link";
 import { Footer } from "@/components/Footer";
 
 export const metadata = {
-  title: "Legal Notice - Socrates",
-  description: "Legal Notice and company information for Socrates",
+  title: "Legal Notice - Socratic Lesson",
+  description: "Legal Notice and company information for Socratic Lesson",
 };
 
 export default function LegalPage() {
@@ -11,7 +11,7 @@ export default function LegalPage() {
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       <header className="border-b border-neutral-800/60 px-4 sm:px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight">Socrates</Link>
+          <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight">Socratic Lesson</Link>
           <span className="text-[10px] text-neutral-600 font-medium uppercase tracking-widest">Legal Notice</span>
         </div>
       </header>
@@ -35,7 +35,7 @@ export default function LegalPage() {
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">2. Platform Description</h2>
             <p className="mb-3">
-              Socrates is an AI-powered Socratic tutoring tool operated by Uncertain Systems.
+              Socratic Lesson is an AI-powered Socratic tutoring tool operated by Uncertain Systems.
               The platform is part of our broader mission of educational accelerationism (edu/acc).
               Our activities include:
             </p>
@@ -52,7 +52,7 @@ export default function LegalPage() {
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">3. Intellectual Property Rights</h2>
             <p className="mb-3">All content on this website, including but not limited to:</p>
             <ul className="list-disc pl-5 space-y-1">
-              <li>The Socrates brand name and design</li>
+              <li>The Socratic Lesson brand name and design</li>
               <li>Website design and layout</li>
               <li>Platform code and software</li>
               <li>AI prompts and tutoring methodology</li>
@@ -73,7 +73,7 @@ export default function LegalPage() {
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">4. User Content</h2>
             <p>
               Users retain ownership of all content they create, including audio recordings,
-              transcripts, and session data. By using Socrates, users grant Uncertain Systems
+              transcripts, and session data. By using Socratic Lesson, users grant Uncertain Systems
               a non-exclusive license to process such content for the purpose of providing the
               tutoring service. This content is not used for AI training without explicit consent.
             </p>
@@ -82,12 +82,12 @@ export default function LegalPage() {
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">5. AI Disclaimer</h2>
             <p>
-              Socrates uses artificial intelligence models provided by third parties (via OpenRouter).
+              Socratic Lesson uses artificial intelligence models provided by third parties (via OpenRouter).
               Users acknowledge that:
             </p>
             <ul className="list-disc pl-5 space-y-1 mt-3">
               <li>AI-generated questions and reports may be inaccurate or incomplete</li>
-              <li>Socrates is not a substitute for professional education or tutoring</li>
+              <li>Socratic Lesson is not a substitute for professional education or tutoring</li>
               <li>EEG data visualization is for informational purposes and is not medical advice</li>
               <li>The platform is an experimental educational tool</li>
             </ul>

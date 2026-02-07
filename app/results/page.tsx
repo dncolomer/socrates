@@ -85,7 +85,7 @@ function ResultsContent() {
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
             <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight hover:text-neutral-300 transition-colors">
-              Socrates
+              Socratic Lesson
             </Link>
             <span className="text-neutral-700 hidden sm:inline">&middot;</span>
             <span className="text-[10px] text-neutral-600 font-medium uppercase tracking-widest hidden sm:inline">Results</span>
@@ -119,7 +119,7 @@ function ResultsContent() {
               <>
                 <span className="text-neutral-800">&middot;</span>
                 <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">
-                  Ended by Socrates
+                  Ended by tutor
                 </span>
               </>
             )}

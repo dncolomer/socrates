@@ -2,8 +2,8 @@ import Link from "next/link";
 import { Footer } from "@/components/Footer";
 
 export const metadata = {
-  title: "Terms & Conditions - Socrates",
-  description: "Terms and Conditions for Socrates",
+  title: "Terms & Conditions - Socratic Lesson",
+  description: "Terms and Conditions for Socratic Lesson",
 };
 
 export default function TermsPage() {
@@ -11,7 +11,7 @@ export default function TermsPage() {
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       <header className="border-b border-neutral-800/60 px-4 sm:px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight">Socrates</Link>
+          <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight">Socratic Lesson</Link>
           <span className="text-[10px] text-neutral-600 font-medium uppercase tracking-widest">Terms & Conditions</span>
         </div>
       </header>
@@ -24,7 +24,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">1. Agreement to Terms</h2>
             <p>
-              By accessing or using Socrates, operated by Uncertain Systems (&quot;Company&quot;, &quot;we&quot;,
+              By accessing or using Socratic Lesson, operated by Uncertain Systems (&quot;Company&quot;, &quot;we&quot;,
               &quot;us&quot;, or &quot;our&quot;), you agree to be bound by these Terms and Conditions. If you
               disagree with any part of these terms, you may not access our services.
             </p>
@@ -33,7 +33,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">2. Platform Description</h2>
             <p className="mb-3">
-              Socrates is an AI-powered Socratic tutoring tool that helps users learn through
+              Socratic Lesson is an AI-powered Socratic tutoring tool that helps users learn through
               guided questioning. The platform is part of our broader mission of educational
               accelerationism (edu/acc). Our services include:
             </p>
@@ -48,7 +48,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">3. Account Registration</h2>
-            <p className="mb-3">To use Socrates, you must create an account. You agree to:</p>
+            <p className="mb-3">To use Socratic Lesson, you must create an account. You agree to:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>Provide accurate and complete registration information</li>
               <li>Maintain the security of your account credentials</li>
@@ -72,7 +72,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">5. Your Content</h2>
-            <p className="mb-3">When you use Socrates:</p>
+            <p className="mb-3">When you use Socratic Lesson:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>You retain ownership of all content you create (audio recordings, transcripts, etc.)</li>
               <li>You grant us a limited license to process this content to provide the tutoring experience</li>
@@ -84,8 +84,8 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">6. AI Disclaimer</h2>
             <p>
-              Socrates uses AI models to generate questions, analyze audio, and produce reports.
-              AI-generated content may be inaccurate, incomplete, or misleading. Socrates is a
+              Socratic Lesson uses AI models to generate questions, analyze audio, and produce reports.
+              AI-generated content may be inaccurate, incomplete, or misleading. Socratic Lesson is a
               learning tool — it does not provide answers, and it is not a substitute for
               professional education, tutoring, or medical advice.
             </p>
@@ -106,7 +106,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">8. Intellectual Property</h2>
             <p>
-              The Socrates brand, website design, and platform code are the property of
+              The Socratic Lesson brand, website design, and platform code are the property of
               Uncertain Systems. The platform source code is open source under the MIT License
               and available at{" "}
               <a href="https://github.com/dncolomer/socrates" className="text-blue-400 hover:text-blue-300" target="_blank" rel="noopener noreferrer">
@@ -118,7 +118,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">9. Disclaimer of Warranties</h2>
             <p>
-              Socrates is provided &quot;as is&quot; without any warranties, express or implied.
+              Socratic Lesson is provided &quot;as is&quot; without any warranties, express or implied.
               We do not warrant that the platform will be uninterrupted, secure, or error-free.
               We make no guarantees regarding the accuracy of AI-generated content.
             </p>
@@ -129,7 +129,7 @@ export default function TermsPage() {
             <p>
               To the maximum extent permitted by law, Uncertain Systems shall not be liable
               for any indirect, incidental, special, consequential, or punitive damages
-              arising from your use of Socrates.
+              arising from your use of Socratic Lesson.
             </p>
           </section>
 

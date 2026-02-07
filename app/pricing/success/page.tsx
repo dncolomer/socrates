@@ -19,7 +19,7 @@ export default function PricingSuccessPage() {
       <header className="border-b border-neutral-800/60 px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto">
           <Link href="/" className="text-lg font-semibold text-white tracking-tight">
-            Socrates
+            Socratic Lesson
           </Link>
         </div>
       </header>

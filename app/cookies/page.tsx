@@ -2,8 +2,8 @@ import Link from "next/link";
 import { Footer } from "@/components/Footer";
 
 export const metadata = {
-  title: "Cookie Policy - Socrates",
-  description: "Cookie Policy for Socrates - How we use cookies on our website",
+  title: "Cookie Policy - Socratic Lesson",
+  description: "Cookie Policy for Socratic Lesson - How we use cookies on our website",
 };
 
 export default function CookiesPage() {
@@ -11,7 +11,7 @@ export default function CookiesPage() {
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       <header className="border-b border-neutral-800/60 px-4 sm:px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight">Socrates</Link>
+          <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight">Socratic Lesson</Link>
           <span className="text-[10px] text-neutral-600 font-medium uppercase tracking-widest">Cookie Policy</span>
         </div>
       </header>
@@ -32,7 +32,7 @@ export default function CookiesPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">2. How We Use Cookies</h2>
-            <p className="mb-3">Socrates uses cookies for the following purposes:</p>
+            <p className="mb-3">Socratic Lesson uses cookies for the following purposes:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>
                 <strong className="text-neutral-300">Essential Cookies:</strong> Required for the website to function
@@ -105,7 +105,7 @@ export default function CookiesPage() {
             </ul>
             <p className="mt-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-amber-400/80 text-xs">
               <strong>Note:</strong> Disabling essential cookies will prevent you from logging in
-              and using Socrates.
+              and using Socratic Lesson.
             </p>
           </section>
 

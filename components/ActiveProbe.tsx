@@ -23,19 +23,32 @@ export function ActiveProbe({
   const [expandLoading, setExpandLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [animateIn, setAnimateIn] = useState(false);
+  const [flashPulse, setFlashPulse] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSpokenIdRef = useRef<string | null>(null);
+  const prevProbeIdRef = useRef<string | null>(null);
 
   // Animate in when probe changes
   useEffect(() => {
     if (probe) {
+      const isNewProbe = prevProbeIdRef.current !== null && prevProbeIdRef.current !== probe.id;
+      prevProbeIdRef.current = probe.id;
+
       setAnimateIn(false);
       setIsExpanded(false);
       setExpandedContent(null);
+
       // Trigger animation on next frame
       requestAnimationFrame(() => {
         requestAnimationFrame(() => setAnimateIn(true));
       });
+
+      // Flash pulse for new probes (not the initial one)
+      if (isNewProbe) {
+        setFlashPulse(true);
+        const timer = setTimeout(() => setFlashPulse(false), 2000);
+        return () => clearTimeout(timer);
+      }
     }
   }, [probe?.id]);
 
@@ -132,7 +145,7 @@ export function ActiveProbe({
     };
   }, []);
 
-  // Loading state -- Socrates is thinking
+  // Loading state -- tutor is thinking
   if (isLoading) {
     return (
       <div className="w-full">
@@ -141,7 +154,7 @@ export function ActiveProbe({
             <ThinkingDots />
           </div>
           <p className="text-neutral-400 text-sm italic">
-            Socrates is formulating an opening question...
+            Your tutor is formulating an opening question...
           </p>
         </div>
       </div>
@@ -157,7 +170,7 @@ export function ActiveProbe({
             <ListenIcon />
           </div>
           <p className="text-neutral-500 text-sm">
-            Socrates is listening...
+            Your tutor is listening...
           </p>
           <div className="ml-auto">
             <AutoSpeakToggle enabled={autoSpeak} onToggle={onToggleAutoSpeak} />
@@ -168,17 +181,33 @@ export function ActiveProbe({
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full relative">
+      {/* Full-width flash overlay on new probe */}
+      {flashPulse && (
+        <div className="absolute inset-0 rounded-2xl bg-blue-500/20 animate-probe-flash pointer-events-none z-10" />
+      )}
       <div
         className={`bg-neutral-900 border rounded-2xl p-5 transition-all duration-500 ${
           animateIn
-            ? "opacity-100 translate-y-0 border-blue-500/30 shadow-lg shadow-blue-500/5"
-            : "opacity-0 translate-y-2 border-neutral-700/50"
+            ? flashPulse
+              ? "opacity-100 translate-y-0 border-blue-400/60 shadow-[0_0_30px_rgba(59,130,246,0.3)] scale-[1.01]"
+              : "opacity-100 translate-y-0 border-blue-500/30 shadow-lg shadow-blue-500/5"
+            : "opacity-0 translate-y-4 border-neutral-700/50"
         }`}
+        style={{ transition: "all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)" }}
       >
+        {/* New question badge */}
+        {flashPulse && (
+          <div className="flex items-center gap-2 mb-3 animate-probe-badge">
+            <div className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+            <span className="text-[11px] font-medium text-blue-400 uppercase tracking-wider">New question</span>
+          </div>
+        )}
         {/* Probe content */}
         <div className="flex items-start gap-4">
-          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center">
+          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-700 ${
+            flashPulse ? "bg-blue-600/40 scale-110" : "bg-blue-600/20"
+          }`}>
             <QuestionIcon />
           </div>
           <div className="flex-1 min-w-0">

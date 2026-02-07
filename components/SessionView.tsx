@@ -71,6 +71,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   const analysisRef = useRef<NodeJS.Timeout | null>(null);
   const lastProbeTimeRef = useRef(0);
   const muteTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const probeContainerRef = useRef<HTMLDivElement | null>(null);
   const observerModeRef = useRef(observerMode);
   const frequencyRef = useRef(frequency);
   const isMutedRef = useRef(isMuted);
@@ -79,6 +80,13 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   useEffect(() => { observerModeRef.current = observerMode; }, [observerMode]);
   useEffect(() => { frequencyRef.current = frequency; }, [frequency]);
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+
+  // Scroll probe into view when it changes
+  useEffect(() => {
+    if (activeProbe && probeContainerRef.current) {
+      probeContainerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [activeProbe?.id]);
 
   // Load session on mount from Supabase + fire opening probe early
   useEffect(() => {
@@ -264,7 +272,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
           if (endRes.ok) {
             const endData = await endRes.json();
             if (endData.shouldEnd) {
-              setEndReason(endData.reason || "Socrates thinks you've covered enough ground.");
+              setEndReason(endData.reason || "Looks like you've covered enough ground.");
               setShowEndDialog(true);
             }
           }
@@ -457,7 +465,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       <header className="border-b border-neutral-800/60 px-3 sm:px-4 py-3 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <a href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight shrink-0 hover:text-neutral-300 transition-colors">Socrates</a>
+            <a href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight shrink-0 hover:text-neutral-300 transition-colors">Socratic Lesson</a>
             <span className="text-neutral-700 shrink-0 hidden sm:inline">&middot;</span>
             <p className="text-xs sm:text-sm text-neutral-500 truncate hidden sm:block">{session.problem}</p>
           </div>
@@ -480,7 +488,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
 
         {/* Active Probe — during session */}
         {isRecording && (
-          <div className="mb-4">
+          <div className="mb-4" ref={probeContainerRef}>
             <ActiveProbe
               probe={activeProbe}
               problem={session.problem}
@@ -748,7 +756,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       {showEndDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 max-w-md mx-4">
-            <h3 className="text-base font-semibold text-white mb-2">Socrates suggests ending</h3>
+            <h3 className="text-base font-semibold text-white mb-2">Tutor suggests ending</h3>
             <p className="text-neutral-400 mb-5 text-sm leading-relaxed">{endReason}</p>
             <div className="flex gap-2.5">
               <button

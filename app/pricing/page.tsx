@@ -75,7 +75,7 @@ export default function PricingPage() {
       <header className="border-b border-neutral-800/60 px-4 sm:px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight">
-            Socrates
+            Socratic Lesson
           </Link>
           <div className="flex items-center gap-3 sm:gap-4">
             <Link href="/" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
@@ -99,7 +99,7 @@ export default function PricingPage() {
             Simple pricing
           </h1>
           <p className="text-neutral-500 text-base max-w-lg mx-auto leading-relaxed">
-            Socrates is free to use and{" "}
+            Socratic Lesson is free to use and{" "}
             <a
               href="https://github.com/dncolomer/socrates"
               target="_blank"

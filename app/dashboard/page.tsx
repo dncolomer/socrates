@@ -347,7 +347,7 @@ export default function DashboardPage() {
       <header className="border-b border-neutral-800/60 px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-lg font-semibold text-white tracking-tight">Socrates</Link>
+            <Link href="/" className="text-lg font-semibold text-white tracking-tight">Socratic Lesson</Link>
             <span className="text-[10px] text-neutral-600 font-medium uppercase tracking-widest">Dashboard</span>
           </div>
           <div className="flex items-center gap-4">
@@ -479,7 +479,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <p className="text-sm text-neutral-400">
-                  Upload recordings of yourself thinking through problems. Socrates
+                  Upload recordings of yourself thinking through problems. Your tutor
                   will learn your reasoning patterns.
                 </p>
               </div>
@@ -631,7 +631,7 @@ export default function DashboardPage() {
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <p className="text-sm text-neutral-400">
-                Customize how Socrates behaves. Edit any prompt below or reset to defaults.
+                Customize how your tutor behaves. Edit any prompt below or reset to defaults.
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -735,7 +735,7 @@ function SessionCard({ session, onDelete }: { session: Session; onDelete: () => 
             )}
             {session.status === "ended_by_tutor" && (
               <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">
-                Ended by Socrates
+                Ended by tutor
               </span>
             )}
           </div>

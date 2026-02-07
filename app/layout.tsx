@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Socrates",
-  description: "Socratic AI assistant for think-aloud problem solving",
+  title: "Socratic Lesson",
+  description: "AI-powered Socratic tutoring for think-aloud problem solving",
 };
 
 export default function RootLayout({

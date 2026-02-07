@@ -2,8 +2,8 @@ import Link from "next/link";
 import { Footer } from "@/components/Footer";
 
 export const metadata = {
-  title: "Privacy Policy - Socrates",
-  description: "Privacy Policy for Socrates - How we collect, use, and protect your data",
+  title: "Privacy Policy - Socratic Lesson",
+  description: "Privacy Policy for Socratic Lesson - How we collect, use, and protect your data",
 };
 
 export default function PrivacyPage() {
@@ -11,7 +11,7 @@ export default function PrivacyPage() {
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       <header className="border-b border-neutral-800/60 px-4 sm:px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight">Socrates</Link>
+          <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight">Socratic Lesson</Link>
           <span className="text-[10px] text-neutral-600 font-medium uppercase tracking-widest">Privacy Policy</span>
         </div>
       </header>
@@ -24,9 +24,9 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">1. Introduction</h2>
             <p>
-              Uncertain Systems (&quot;Socrates&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) is committed to protecting
+              Uncertain Systems (&quot;Socratic Lesson&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) is committed to protecting
               your privacy. This Privacy Policy explains how we collect, use, disclose, and
-              safeguard your information when you use Socrates and our services.
+              safeguard your information when you use Socratic Lesson and our services.
             </p>
           </section>
 
@@ -71,7 +71,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-neutral-200 mb-3">4. Third-Party Services</h2>
-            <p className="mb-3">We share data with the following third-party services, strictly to operate Socrates:</p>
+            <p className="mb-3">We share data with the following third-party services, strictly to operate Socratic Lesson:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li><strong className="text-neutral-300">Supabase</strong> — authentication, database, and file storage (audio, EEG, transcripts)</li>
               <li><strong className="text-neutral-300">OpenRouter</strong> — AI model inference for audio analysis, probe generation, and reports</li>
