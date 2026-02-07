@@ -137,7 +137,7 @@ export async function getSessions(): Promise<Session[]> {
     probesBySession.set(p.session_id, existing);
   }
 
-  return sessionRows.map((s) => mapDbSession(s, probesBySession.get(s.id) || []));
+  return sessionRows.map((s: { id: string }) => mapDbSession(s, probesBySession.get(s.id) || []));
 }
 
 export async function saveSession(session: Session): Promise<void> {
@@ -183,7 +183,7 @@ export async function deleteSession(id: string): Promise<void> {
   if (eegRows && eegRows.length > 0) {
     await supabase.storage
       .from("session-eeg")
-      .remove(eegRows.map((r) => r.data_path));
+      .remove(eegRows.map((r: { data_path: string }) => r.data_path));
   }
 
   // Cascade delete handles probes, eeg rows
