@@ -122,7 +122,7 @@ export async function getSessions(): Promise<Session[]> {
   if (!sessionRows) return [];
 
   // Batch-load all probes for these sessions
-  const sessionIds = sessionRows.map((s) => s.id);
+  const sessionIds = sessionRows.map((s: { id: string }) => s.id);
   const { data: allProbes } = await supabase
     .from("probes")
     .select("*")
