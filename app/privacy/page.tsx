@@ -111,7 +111,35 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-neutral-200 mb-3">7. Data Retention</h2>
+            <h2 className="text-lg font-semibold text-neutral-200 mb-3">7. Anonymized Data for AI Training</h2>
+            <p className="mb-3">
+              With your explicit consent, we collect <strong className="text-neutral-300">anonymized</strong> think-aloud
+              data from Socratic sessions to build AI training, fine-tuning, and context engineering datasets. This
+              data is used to improve the quality of Socratic tutoring and advance research in AI-assisted education.
+            </p>
+            <h3 className="text-sm font-medium text-neutral-300 mb-2">What we collect</h3>
+            <p className="mb-3">Depending on your preferences (configurable in your Dashboard), this may include:</p>
+            <ul className="list-disc pl-5 space-y-1 mb-4">
+              <li><strong className="text-neutral-300">Transcripts only:</strong> Anonymized text transcripts of your think-aloud sessions, including reasoning patterns and probe interactions</li>
+              <li><strong className="text-neutral-300">Transcripts + Audio:</strong> In addition to transcripts, anonymized audio recordings that capture speech patterns (pauses, hesitation, tone shifts) — voice fingerprints are never stored or included</li>
+            </ul>
+            <h3 className="text-sm font-medium text-neutral-300 mb-2">How we anonymize</h3>
+            <ul className="list-disc pl-5 space-y-1 mb-4">
+              <li>All names, emails, and personally identifiable information are removed</li>
+              <li>Session metadata (timestamps, user IDs) is stripped or cryptographically hashed</li>
+              <li>Data cannot be traced back to individual users</li>
+            </ul>
+            <h3 className="text-sm font-medium text-neutral-300 mb-2">Your control</h3>
+            <p>
+              Data sharing is <strong className="text-neutral-300">opt-in</strong> and disabled by default. You can
+              change your preferences at any time from the &quot;Data &amp; Privacy&quot; tab in your Dashboard.
+              Changes apply to future sessions only — previously shared data remains in existing datasets. You
+              may request removal of all your contributed data by contacting us.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-semibold text-neutral-200 mb-3">8. Data Retention</h2>
             <p>
               We retain your personal information only for as long as necessary to fulfill the
               purposes for which it was collected. You can delete any session from your dashboard
@@ -121,7 +149,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-neutral-200 mb-3">8. Children&apos;s Privacy</h2>
+            <h2 className="text-lg font-semibold text-neutral-200 mb-3">9. Children&apos;s Privacy</h2>
             <p>
               Our services are not directed to children under 16. We do not knowingly collect
               personal information from children. If you believe we have collected information
@@ -130,7 +158,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-neutral-200 mb-3">9. Changes to This Policy</h2>
+            <h2 className="text-lg font-semibold text-neutral-200 mb-3">10. Changes to This Policy</h2>
             <p>
               We may update this Privacy Policy from time to time. We will notify you of any
               changes by posting the new Privacy Policy on this page with an updated revision date.
@@ -138,7 +166,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-neutral-200 mb-3">10. Contact Us</h2>
+            <h2 className="text-lg font-semibold text-neutral-200 mb-3">11. Contact Us</h2>
             <p className="mb-3">If you have questions about this Privacy Policy, please contact us at:</p>
             <div className="p-4 rounded-lg bg-neutral-900/50 border border-neutral-800 space-y-1">
               <p><strong className="text-neutral-300">Email:</strong> daniel@uncertain.systems</p>

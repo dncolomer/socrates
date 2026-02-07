@@ -49,6 +49,9 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   const [openingProbeLoading, setOpeningProbeLoading] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
 
+  // Session ending / saving
+  const [isSaving, setIsSaving] = useState(false);
+
   // Tutor-end dialog
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [endReason, setEndReason] = useState("");
@@ -320,6 +323,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
 
     if (stream) { stream.getTracks().forEach((t) => t.stop()); setStream(null); }
     setIsRecording(false);
+    setIsSaving(true);
     if (!session) return;
 
     const finalSession = endSession(session, elapsedSeconds * 1000);
@@ -328,23 +332,23 @@ export function SessionView({ sessionId }: { sessionId: string }) {
     // Persist to Supabase
     await saveSession(finalSession);
 
+    // Navigate immediately — audio/EEG saves continue in background
+    router.push(`/results?id=${finalSession.id}`);
+
+    // Save audio and EEG in background (non-blocking)
     if (fullAudio) {
-      try { await saveSessionAudio(finalSession.id, fullAudio); } catch {}
+      saveSessionAudio(finalSession.id, fullAudio).catch(() => {});
     }
 
-    // Save EEG data if Muse was streaming
     if (museStatus === "streaming" && eegBufferRef.current.size > 0) {
-      try {
-        const channels: Record<string, number[]> = {};
-        for (const [ch, samples] of eegBufferRef.current.entries()) {
-          channels[ch] = samples;
-        }
-        await saveSessionEEG(finalSession.id, { channels, bandPowers }, museClientRef.current?.deviceName);
-      } catch {}
+      const channels: Record<string, number[]> = {};
+      for (const [ch, samples] of eegBufferRef.current.entries()) {
+        channels[ch] = samples;
+      }
+      saveSessionEEG(finalSession.id, { channels, bandPowers }, museClientRef.current?.deviceName).catch(() => {});
     }
 
     handleDisconnectMuse();
-    router.push(`/results?id=${finalSession.id}`);
   };
 
   const handleMute = (durationMs: number) => {
@@ -451,10 +455,13 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!session) {
+  if (!session || isSaving) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] gap-4">
         <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
+        {isSaving && (
+          <p className="text-sm text-neutral-500 animate-pulse">Saving session...</p>
+        )}
       </div>
     );
   }

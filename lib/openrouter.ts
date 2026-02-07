@@ -534,6 +534,89 @@ export async function generateReport(options: {
 }
 
 // ============================================
+// TRANSCRIPT GENERATION (Full session audio → text)
+// ============================================
+
+export async function transcribeAudio(options: {
+  audioBase64: string;
+  audioFormat: string;
+  problem: string;
+}): Promise<{ success: boolean; transcript?: string; error?: string }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey) {
+    return { success: false, error: "OPENROUTER_API_KEY not configured" };
+  }
+
+  const prompt = `Transcribe this audio recording of a student thinking aloud while working through a problem.
+
+Problem being worked on: ${options.problem}
+
+Produce a faithful, verbatim transcript of everything the student says. Include:
+- All words spoken, including filler words (um, uh, like, you know)
+- Indicate notable pauses with [pause]
+- Indicate long silences with [long silence]
+- Indicate unclear speech with [inaudible]
+- Use natural paragraph breaks when the student shifts topics or takes a significant pause
+
+Do NOT summarize. Do NOT add commentary or analysis. Do NOT include timestamps.
+Output ONLY the transcript text, nothing else.`;
+
+  try {
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "Socrates",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              {
+                type: "file",
+                file: {
+                  filename: `session.${options.audioFormat}`,
+                  file_data: `data:audio/${options.audioFormat};base64,${options.audioBase64}`,
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 8000,
+        temperature: 0.1,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OpenRouter API error:", response.status, errorText);
+      return { success: false, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const transcript = data.choices?.[0]?.message?.content?.trim();
+
+    if (!transcript) {
+      return { success: false, error: "No transcript generated" };
+    }
+
+    return { success: true, transcript };
+  } catch (error) {
+    console.error("Transcription failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// ============================================
 // EXPAND PROBE
 // ============================================
 

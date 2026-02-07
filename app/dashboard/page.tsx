@@ -11,7 +11,12 @@ import { EEGWaveView } from "@/components/EEGWaveView";
 import { BrainStateBar } from "@/components/BrainStateBar";
 import { DEFAULT_PROMPTS, PROMPT_META, type PromptKey, type UserPrompts } from "@/lib/openrouter";
 
-type Tab = "sessions" | "transcripts" | "devices" | "prompts";
+type Tab = "sessions" | "transcripts" | "devices" | "prompts" | "data";
+
+type DataSharingPrefs = {
+  share_transcripts: boolean;
+  share_audio: boolean;
+};
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -41,6 +46,11 @@ export default function DashboardPage() {
   const [userPrompts, setUserPrompts] = useState<UserPrompts>({});
   const [promptsSaving, setPromptsSaving] = useState(false);
   const [promptsSaved, setPromptsSaved] = useState(false);
+
+  // Data & Privacy
+  const [dataPrefs, setDataPrefs] = useState<DataSharingPrefs>({ share_transcripts: false, share_audio: false });
+  const [dataPrefsSaving, setDataPrefsSaving] = useState(false);
+  const [dataPrefsSaved, setDataPrefsSaved] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -79,6 +89,9 @@ export default function DashboardPage() {
         }
         if (profile.metadata?.prompts) {
           setUserPrompts(profile.metadata.prompts as UserPrompts);
+        }
+        if (profile.metadata?.data_sharing) {
+          setDataPrefs(profile.metadata.data_sharing as DataSharingPrefs);
         }
       }
 
@@ -309,6 +322,26 @@ export default function DashboardPage() {
     setUserPrompts({});
   };
 
+  const handleSaveDataPrefs = async () => {
+    setDataPrefsSaving(true);
+    setDataPrefsSaved(false);
+    try {
+      const res = await fetch("/api/save-data-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data_sharing: dataPrefs }),
+      });
+      if (res.ok) {
+        setDataPrefsSaved(true);
+        setTimeout(() => setDataPrefsSaved(false), 3000);
+      }
+    } catch {
+      // silent
+    } finally {
+      setDataPrefsSaving(false);
+    }
+  };
+
   const handleBuyExtraLesson = async () => {
     setBuyingExtra(true);
     try {
@@ -439,19 +472,28 @@ export default function DashboardPage() {
 
         {/* Tabs */}
         <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 scrollbar-hide">
-          {(["sessions", "transcripts", "devices", "prompts"] as Tab[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`shrink-0 px-3.5 py-1.5 text-xs rounded-full border transition-colors capitalize ${
-                activeTab === tab
-                  ? "bg-white text-black border-white"
-                  : "text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white"
-              }`}
-            >
-              {tab === "transcripts" ? "Think-Aloud Data" : tab}
-            </button>
-          ))}
+          {(["sessions", "transcripts", "devices", "prompts", "data"] as Tab[]).map((tab) => {
+            const tabLabels: Record<Tab, string> = {
+              sessions: "Sessions",
+              transcripts: "Think-Aloud Data",
+              devices: "Devices",
+              prompts: "Prompts",
+              data: "Data & Privacy",
+            };
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`shrink-0 px-3.5 py-1.5 text-xs rounded-full border transition-colors ${
+                  activeTab === tab
+                    ? "bg-white text-black border-white"
+                    : "text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white"
+                }`}
+              >
+                {tabLabels[tab]}
+              </button>
+            );
+          })}
         </div>
 
         {/* Tab Content */}
@@ -694,6 +736,154 @@ export default function DashboardPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {activeTab === "data" && (
+          <div className="space-y-6">
+            {/* Explanation note */}
+            <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+              <div className="flex items-start gap-3">
+                <div className="shrink-0 mt-0.5">
+                  <ShieldIcon />
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-amber-300 mb-1.5">About data collection</h4>
+                  <p className="text-xs text-amber-200/70 leading-relaxed">
+                    We collect <strong className="text-amber-200">anonymized</strong> think-aloud data from Socratic
+                    sessions to build AI training, fine-tuning, and context engineering datasets. This data helps
+                    us improve the quality of Socratic tutoring for everyone. All personally identifiable information
+                    is stripped before the data enters any dataset. You are in full control of what you share.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Data sharing options */}
+            <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
+              <h4 className="text-sm font-medium text-neutral-200 mb-1">Data sharing preferences</h4>
+              <p className="text-[11px] text-neutral-600 mb-5">
+                Choose what anonymized data from your sessions can be used for research and AI training datasets.
+              </p>
+
+              <div className="space-y-3">
+                {/* Option: No data sharing */}
+                <label
+                  className={`flex items-start gap-3.5 p-3.5 rounded-lg border cursor-pointer transition-all duration-200 ${
+                    !dataPrefs.share_transcripts && !dataPrefs.share_audio
+                      ? "border-white/20 bg-white/5"
+                      : "border-neutral-800 hover:border-neutral-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="data-sharing"
+                    checked={!dataPrefs.share_transcripts && !dataPrefs.share_audio}
+                    onChange={() => setDataPrefs({ share_transcripts: false, share_audio: false })}
+                    className="mt-0.5 accent-white"
+                  />
+                  <div>
+                    <p className="text-sm text-neutral-200 font-medium">No data sharing</p>
+                    <p className="text-[11px] text-neutral-600 mt-0.5">
+                      Your session data will not be used for AI training datasets.
+                    </p>
+                  </div>
+                </label>
+
+                {/* Option: Transcripts only */}
+                <label
+                  className={`flex items-start gap-3.5 p-3.5 rounded-lg border cursor-pointer transition-all duration-200 ${
+                    dataPrefs.share_transcripts && !dataPrefs.share_audio
+                      ? "border-blue-500/30 bg-blue-500/5"
+                      : "border-neutral-800 hover:border-neutral-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="data-sharing"
+                    checked={dataPrefs.share_transcripts && !dataPrefs.share_audio}
+                    onChange={() => setDataPrefs({ share_transcripts: true, share_audio: false })}
+                    className="mt-0.5 accent-blue-500"
+                  />
+                  <div>
+                    <p className="text-sm text-neutral-200 font-medium">Transcripts only</p>
+                    <p className="text-[11px] text-neutral-600 mt-0.5">
+                      Only anonymized text transcripts of your think-aloud sessions will be included.
+                      No audio recordings will be shared.
+                    </p>
+                  </div>
+                </label>
+
+                {/* Option: Transcripts + Audio */}
+                <label
+                  className={`flex items-start gap-3.5 p-3.5 rounded-lg border cursor-pointer transition-all duration-200 ${
+                    dataPrefs.share_transcripts && dataPrefs.share_audio
+                      ? "border-green-500/30 bg-green-500/5"
+                      : "border-neutral-800 hover:border-neutral-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="data-sharing"
+                    checked={dataPrefs.share_transcripts && dataPrefs.share_audio}
+                    onChange={() => setDataPrefs({ share_transcripts: true, share_audio: true })}
+                    className="mt-0.5 accent-green-500"
+                  />
+                  <div>
+                    <p className="text-sm text-neutral-200 font-medium">Transcripts and audio</p>
+                    <p className="text-[11px] text-neutral-600 mt-0.5">
+                      Both anonymized text transcripts and audio recordings from your sessions will be
+                      included. Audio data provides richer signals for AI training (pauses, hesitation,
+                      tone shifts).
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between mt-5 pt-4 border-t border-neutral-800/60">
+                <p className="text-[11px] text-neutral-700">
+                  You can change this at any time. Changes apply to future sessions only.
+                </p>
+                <button
+                  onClick={handleSaveDataPrefs}
+                  disabled={dataPrefsSaving}
+                  className="px-3.5 py-1.5 text-xs bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white rounded-lg transition-colors"
+                >
+                  {dataPrefsSaving ? "Saving..." : dataPrefsSaved ? "Saved!" : "Save preferences"}
+                </button>
+              </div>
+            </div>
+
+            {/* What data is collected */}
+            <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
+              <h4 className="text-sm font-medium text-neutral-200 mb-3">What gets anonymized?</h4>
+              <div className="space-y-2.5 text-xs text-neutral-500">
+                <div className="flex items-start gap-2.5">
+                  <span className="text-green-500 mt-px shrink-0">&#10003;</span>
+                  <p>All names, emails, and personally identifiable information are removed</p>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="text-green-500 mt-px shrink-0">&#10003;</span>
+                  <p>Session metadata (timestamps, user IDs) is stripped or hashed</p>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="text-green-500 mt-px shrink-0">&#10003;</span>
+                  <p>Think-aloud reasoning patterns and probe interactions are preserved (these are what make the data valuable)</p>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="text-green-500 mt-px shrink-0">&#10003;</span>
+                  <p>Audio is used only for speech pattern analysis — voice fingerprints are not stored</p>
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-neutral-800/60">
+                <Link
+                  href="/privacy"
+                  className="text-xs text-neutral-600 hover:text-white transition-colors"
+                >
+                  Read our full Privacy Policy &rarr;
+                </Link>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -952,6 +1142,14 @@ function BoltIcon() {
   return (
     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
     </svg>
   );
 }

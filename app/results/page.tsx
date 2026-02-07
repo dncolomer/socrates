@@ -7,6 +7,7 @@ import {
   getSession,
   getSessionAudio,
   getSessionStats,
+  saveSession,
   type Session,
 } from "@/lib/storage";
 import { formatTime } from "@/lib/utils";
@@ -20,6 +21,8 @@ function ResultsContent() {
   const [session, setSession] = useState<Session | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [transcriptLoading, setTranscriptLoading] = useState(false);
 
   useEffect(() => {
     if (!sessionId) {
@@ -37,10 +40,95 @@ function ResultsContent() {
       }
 
       setLoading(false);
+
+      if (s && s.status !== "active") {
+        // Generate report and transcript in parallel if missing
+        if (!s.report) generateAndSaveReport(s);
+        if (!s.transcript && s.hasAudio) generateAndSaveTranscript(s);
+      }
     };
 
     loadSession();
   }, [sessionId]);
+
+  const generateAndSaveReport = async (s: Session) => {
+    setReportLoading(true);
+    try {
+      const stats = getSessionStats(s);
+      const durationMin = Math.round(s.durationMs / 60000);
+
+      // Build probes summary for the report
+      const probesSummary = s.probes
+        .map((p, i) => `Probe ${i + 1} (gap ${Math.round(p.gapScore * 100)}%, ${formatTime(Math.floor(p.timestamp / 1000))}): ${p.text}`)
+        .join("\n");
+
+      // Include EEG context if available
+      const eegSummary = s.metadata?.eegSummary;
+      let eegContext: string | undefined;
+      if (eegSummary) {
+        const bands = Object.entries(eegSummary)
+          .map(([band, val]) => `${band}: ${Math.round((val as number) * 100)}%`)
+          .join(", ");
+        eegContext = `Average band powers during session: ${bands}`;
+      }
+
+      const res = await fetch("/api/generate-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          problem: s.problem,
+          duration: `${durationMin} minutes`,
+          probeCount: stats.probeCount,
+          avgGapScore: stats.avgGapScore,
+          probesSummary,
+          eegContext,
+        }),
+      });
+
+      if (res.ok) {
+        const { report } = await res.json();
+        if (report) {
+          // Update local state
+          const updatedSession = { ...s, report, reportGeneratedAt: new Date().toISOString() };
+          setSession(updatedSession);
+
+          // Persist to DB
+          await saveSession(updatedSession);
+        }
+      }
+    } catch (err) {
+      console.error("Report generation failed:", err);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const generateAndSaveTranscript = async (s: Session) => {
+    setTranscriptLoading(true);
+    try {
+      const res = await fetch("/api/generate-transcript", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: s.id,
+          problem: s.problem,
+        }),
+      });
+
+      if (res.ok) {
+        const { transcript } = await res.json();
+        if (transcript) {
+          setSession((prev) =>
+            prev ? { ...prev, transcript } : prev
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Transcript generation failed:", err);
+    } finally {
+      setTranscriptLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -165,6 +253,45 @@ function ResultsContent() {
           </div>
         )}
 
+        {/* Transcript */}
+        {session.transcript ? (
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-neutral-300">Session Transcript</h3>
+              <button
+                onClick={() => {
+                  if (session.transcript) {
+                    const blob = new Blob([session.transcript], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `socrates-transcript-${session.id.substring(0, 8)}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg border border-neutral-700 transition-colors"
+              >
+                <DownloadIcon />
+                Download
+              </button>
+            </div>
+            <div className="max-h-80 overflow-y-auto rounded-lg bg-[#0a0a0a] border border-neutral-800 p-4">
+              <p className="text-sm text-neutral-400 leading-relaxed whitespace-pre-wrap font-mono">
+                {session.transcript}
+              </p>
+            </div>
+          </div>
+        ) : transcriptLoading ? (
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mb-6">
+            <h3 className="text-sm font-medium text-neutral-300 mb-3">Session Transcript</h3>
+            <div className="flex items-center gap-3 py-6 justify-center">
+              <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+              <p className="text-sm text-neutral-500">Transcribing session audio...</p>
+            </div>
+          </div>
+        ) : null}
+
         {/* EEG Summary */}
         {eegSummary && (
           <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mb-6">
@@ -214,7 +341,7 @@ function ResultsContent() {
         )}
 
         {/* Report */}
-        {session.report && (
+        {session.report ? (
           <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mb-6">
             <h3 className="text-sm font-medium text-neutral-300 mb-3">Session Report</h3>
             <div
@@ -222,7 +349,15 @@ function ResultsContent() {
               dangerouslySetInnerHTML={{ __html: markdownToHtml(session.report) }}
             />
           </div>
-        )}
+        ) : reportLoading ? (
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mb-6">
+            <h3 className="text-sm font-medium text-neutral-300 mb-3">Session Report</h3>
+            <div className="flex items-center gap-3 py-6 justify-center">
+              <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+              <p className="text-sm text-neutral-500">Generating your session report...</p>
+            </div>
+          </div>
+        ) : null}
 
         {/* Probes Timeline */}
         <div className="mb-8">

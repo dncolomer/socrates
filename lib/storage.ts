@@ -32,6 +32,7 @@ export interface Session {
   audioPath?: string;
   report?: string;
   reportGeneratedAt?: string;
+  transcript?: string;
   metadata: {
     observerMode?: ObserverMode;
     frequency?: Frequency;
@@ -55,6 +56,7 @@ function mapDbSession(s: any, probes: Probe[] = []): Session {
     audioPath: s.audio_path ?? undefined,
     report: s.report ?? undefined,
     reportGeneratedAt: s.report_generated_at ?? undefined,
+    transcript: s.transcript ?? undefined,
     metadata: s.metadata || {},
   };
 }
@@ -153,6 +155,7 @@ export async function saveSession(session: Session): Promise<void> {
       audio_path: session.audioPath || null,
       report: session.report || null,
       report_generated_at: session.reportGeneratedAt || null,
+      transcript: session.transcript || null,
       metadata: session.metadata,
     })
     .eq("id", session.id);
