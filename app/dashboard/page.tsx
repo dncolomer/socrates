@@ -15,7 +15,8 @@ type Tab = "sessions" | "transcripts" | "devices" | "prompts";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<{ email?: string; username?: string } | null>(null);
+  const [user, setUser] = useState<{ email?: string; username?: string; plan?: string; isAdmin?: boolean; extraLessons?: number; sessionsThisMonth?: number } | null>(null);
+  const [buyingExtra, setBuyingExtra] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("sessions");
@@ -61,7 +62,7 @@ export default function DashboardPage() {
       // Fetch profile
       const { data: profile } = await supabase
         .from("profiles")
-        .select("username, metadata")
+        .select("username, metadata, plan, is_admin, extra_lessons")
         .eq("id", authUser.id)
         .single();
 
@@ -69,6 +70,9 @@ export default function DashboardPage() {
         setUser({
           email: authUser.email,
           username: profile.username || undefined,
+          plan: profile.plan || "free",
+          isAdmin: profile.is_admin || false,
+          extraLessons: profile.extra_lessons || 0,
         });
         if (profile.metadata?.muse_device_name) {
           setMuseDeviceName(profile.metadata.muse_device_name);
@@ -305,6 +309,25 @@ export default function DashboardPage() {
     setUserPrompts({});
   };
 
+  const handleBuyExtraLesson = async () => {
+    setBuyingExtra(true);
+    try {
+      const res = await fetch("/api/stripe/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceType: "extra_lesson" }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error("Buy extra lesson error:", err);
+    } finally {
+      setBuyingExtra(false);
+    }
+  };
+
   // Compute aggregate stats
   const totalSessions = sessions.length;
   const totalMinutes = Math.round(sessions.reduce((s, sess) => s + sess.durationMs, 0) / 60000);
@@ -379,13 +402,39 @@ export default function DashboardPage() {
               </p>
             </div>
           </div>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/15 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            <PlusIcon />
-            New Session
-          </Link>
+          <div className="flex items-center gap-3">
+            {/* Plan badge + Buy extra */}
+            {user && !user.isAdmin && user.plan !== "pro" && (
+              <button
+                onClick={handleBuyExtraLesson}
+                disabled={buyingExtra}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs text-amber-400 border border-amber-500/30 hover:border-amber-500/50 hover:bg-amber-500/5 disabled:opacity-50 rounded-lg transition-colors"
+              >
+                <BoltIcon />
+                {buyingExtra ? "Redirecting..." : "Buy extra lesson — $1.99"}
+              </button>
+            )}
+            {user && (
+              <span className={`px-2 py-1 text-[10px] uppercase tracking-wider font-medium rounded-md border ${
+                user.isAdmin
+                  ? "text-purple-400 border-purple-500/30 bg-purple-500/10"
+                  : user.plan === "pro"
+                  ? "text-green-400 border-green-500/30 bg-green-500/10"
+                  : user.plan === "regular"
+                  ? "text-blue-400 border-blue-500/30 bg-blue-500/10"
+                  : "text-neutral-500 border-neutral-700 bg-neutral-800/50"
+              }`}>
+                {user.isAdmin ? "Admin" : user.plan || "Free"}
+              </span>
+            )}
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/15 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              <PlusIcon />
+              New Session
+            </Link>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -888,6 +937,14 @@ function BluetoothIcon() {
   return (
     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7l10 10-5 5V2l5 5L7 17" />
+    </svg>
+  );
+}
+
+function BoltIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
     </svg>
   );
 }
