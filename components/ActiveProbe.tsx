@@ -182,7 +182,7 @@ export function ActiveProbe({
             <QuestionIcon />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-white text-lg leading-relaxed">{probe.text}</p>
+            <p className="text-white text-base sm:text-lg leading-relaxed">{probe.text}</p>
 
             {/* Expanded content */}
             {isExpanded && (
@@ -201,7 +201,7 @@ export function ActiveProbe({
             )}
 
             {/* Actions row */}
-            <div className="mt-3 flex items-center gap-4">
+            <div className="mt-3 flex flex-wrap items-center gap-3 sm:gap-4">
               <button
                 onClick={handleExpand}
                 className="text-xs text-neutral-500 hover:text-blue-400 transition-colors"

@@ -80,7 +80,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   useEffect(() => { frequencyRef.current = frequency; }, [frequency]);
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
 
-  // Load session on mount from Supabase
+  // Load session on mount from Supabase + fire opening probe early
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -89,6 +89,35 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       if (s) {
         setSession(s);
         sessionRef.current = s;
+
+        // Fire opening probe immediately so it shows before Start
+        if (s.probes.length === 0) {
+          setOpeningProbeLoading(true);
+          try {
+            const res = await fetch("/api/opening-probe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ problem: s.problem }),
+            });
+            if (!cancelled && res.ok) {
+              const { probe: probeText } = await res.json();
+              const savedProbe = await addProbe(s.id, {
+                timestamp: 0,
+                gapScore: 0,
+                signals: ["opening"],
+                text: probeText,
+              });
+              const updated = addProbeToSession(s, savedProbe);
+              setSession(updated);
+              sessionRef.current = updated;
+              setActiveProbe(savedProbe);
+            }
+          } catch { /* opening probe is optional */ }
+          finally { if (!cancelled) setOpeningProbeLoading(false); }
+        } else {
+          // Session already has probes (e.g. page refresh) — show the latest
+          setActiveProbe(s.probes[s.probes.length - 1]);
+        }
       } else {
         router.push("/");
       }
@@ -254,35 +283,6 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setStream(mediaStream);
 
-      // Fire opening probe
-      if (sessionRef.current) {
-        setOpeningProbeLoading(true);
-        try {
-          const res = await fetch("/api/opening-probe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ problem: sessionRef.current.problem }),
-          });
-          if (res.ok) {
-            const { probe: probeText } = await res.json();
-            const currentSession = sessionRef.current;
-            if (currentSession) {
-              const savedProbe = await addProbe(currentSession.id, {
-                timestamp: 0,
-                gapScore: 0,
-                signals: ["opening"],
-                text: probeText,
-              });
-              const updatedSession = addProbeToSession(currentSession, savedProbe);
-              setSession(updatedSession);
-              sessionRef.current = updatedSession;
-              setActiveProbe(savedProbe);
-            }
-          }
-        } catch { /* opening probe is optional */ }
-        finally { setOpeningProbeLoading(false); }
-      }
-
       const recorder = new AudioRecorder({ chunkDurationMs: 5000, maxBufferDurationMs: 30000 });
       recorderRef.current = recorder;
       await recorder.start();
@@ -378,21 +378,21 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       {/* Header */}
-      <header className="border-b border-neutral-800/60 px-4 py-3 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <a href="/" className="text-lg font-semibold text-white tracking-tight shrink-0 hover:text-neutral-300 transition-colors">Socrates</a>
-            <span className="text-neutral-700 shrink-0">&middot;</span>
-            <p className="text-sm text-neutral-500 truncate">{session.problem}</p>
+      <header className="border-b border-neutral-800/60 px-3 sm:px-4 py-3 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <a href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight shrink-0 hover:text-neutral-300 transition-colors">Socrates</a>
+            <span className="text-neutral-700 shrink-0 hidden sm:inline">&middot;</span>
+            <p className="text-xs sm:text-sm text-neutral-500 truncate hidden sm:block">{session.problem}</p>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {isAnalyzing && (
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                <span className="text-[11px] text-blue-400">Observing</span>
+                <span className="text-[11px] text-blue-400 hidden sm:inline">Observing</span>
               </div>
             )}
-            <div className="text-sm font-mono text-neutral-300 tabular-nums bg-neutral-900/50 px-2.5 py-1 rounded-lg border border-neutral-800">
+            <div className="text-xs sm:text-sm font-mono text-neutral-300 tabular-nums bg-neutral-900/50 px-2 sm:px-2.5 py-1 rounded-lg border border-neutral-800">
               {formatTime(elapsedSeconds)}
             </div>
           </div>
@@ -400,154 +400,98 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col max-w-5xl mx-auto w-full px-6 py-5">
+      <div className="flex-1 flex flex-col max-w-5xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-5">
 
-        {/* How It Works — shown before session starts */}
-        {!isRecording && (
-          <div className="mb-5 rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
-            <h3 className="text-sm font-medium text-neutral-300 mb-4">How a session works</h3>
-
-            {/* Flow diagram */}
-            <div className="flex items-start gap-3 mb-4">
-              {[
-                { icon: "🎙", label: "You talk", desc: "Think out loud about your topic" },
-                { icon: "🔍", label: "Socrates listens", desc: "Audio is analyzed for reasoning gaps" },
-                { icon: "❓", label: "You get probed", desc: "Socratic questions push you deeper" },
-                { icon: "📊", label: "You get a report", desc: "AI summary of your session" },
-              ].map((step, i) => (
-                <div key={i} className="flex-1 relative">
-                  <div className="flex flex-col items-center text-center gap-1.5">
-                    <div className="w-10 h-10 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-base">
-                      {step.icon}
-                    </div>
-                    <p className="text-xs font-medium text-neutral-300">{step.label}</p>
-                    <p className="text-[11px] text-neutral-600 leading-tight">{step.desc}</p>
-                  </div>
-                  {i < 3 && (
-                    <div className="absolute top-5 left-[calc(50%+24px)] w-[calc(100%-48px)] flex items-center">
-                      <div className="flex-1 border-t border-dashed border-neutral-700" />
-                      <svg className="w-3 h-3 text-neutral-700 -ml-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Tips + Controls side by side */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[11px] text-neutral-500 mb-2 font-medium">Tips</p>
-                <div className="space-y-1.5">
-                  {[
-                    "Speak naturally — explain as if teaching a friend",
-                    "Don't worry about pauses, they help Socrates analyze",
-                    "Answer the probes out loud to deepen your understanding",
-                    "Sessions typically last 5–20 minutes",
-                  ].map((tip, i) => (
-                    <div key={i} className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-neutral-800/40">
-                      <span className="text-neutral-600 text-[11px] mt-px shrink-0">✦</span>
-                      <p className="text-[11px] text-neutral-500 leading-relaxed">{tip}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-[11px] text-neutral-500 mb-2 font-medium">Controls reference</p>
-                <div className="space-y-2">
-                  {[
-                    { icon: <MicIcon />, label: "Start / End Session", desc: "Begin or stop recording" },
-                    { icon: <ObserverIcon />, label: "Observer Mode", desc: "Off / Passive / Active probing" },
-                    { icon: <FreqIcon />, label: "Frequency", desc: "How often Socrates checks in" },
-                    { icon: <SpeakerIcon />, label: "Auto-read", desc: "Probes read aloud via TTS" },
-                    { icon: <BluetoothIcon />, label: "Connect Muse", desc: "Pair EEG headband" },
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-start gap-2.5">
-                      <div className="w-6 h-6 rounded-md bg-neutral-800 border border-neutral-700 flex items-center justify-center text-neutral-400 shrink-0 mt-0.5">
-                        {item.icon}
-                      </div>
-                      <div>
-                        <p className="text-[11px] font-medium text-neutral-300">{item.label}</p>
-                        <p className="text-[10px] text-neutral-600 leading-tight">{item.desc}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+        {/* Active Probe — during session */}
+        {isRecording && (
+          <div className="mb-4">
+            <ActiveProbe
+              probe={activeProbe}
+              problem={session.problem}
+              isLoading={openingProbeLoading}
+              autoSpeak={autoSpeak}
+              onToggleAutoSpeak={() => setAutoSpeak((p) => !p)}
+            />
           </div>
         )}
 
-        {/* Active Probe */}
-        {isRecording && (
-          <ActiveProbe
-            probe={activeProbe}
-            problem={session.problem}
-            isLoading={openingProbeLoading}
-            autoSpeak={autoSpeak}
-            onToggleAutoSpeak={() => setAutoSpeak((p) => !p)}
-          />
-        )}
-
         {/* Recording Card */}
-        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mt-4">
-          {/* Audio Visualizer — always visible */}
-          <div className="mb-4">
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5">
+          {/* Opening question or Audio Visualizer */}
+          <div className="mb-3">
             {isRecording ? (
               <AudioVisualizer isRecording={isRecording} stream={stream} />
             ) : (
-              <div className="h-16 flex items-center justify-center text-neutral-600 text-sm">
-                Ready to begin
+              <div className="py-2 px-1">
+                {openingProbeLoading && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1 shrink-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </div>
+                    <p className="text-neutral-500 text-sm italic">Preparing your first question...</p>
+                  </div>
+                )}
+                {activeProbe && !openingProbeLoading && (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider font-medium text-blue-400/70 mb-2">Your starting question</p>
+                    <p className="text-white text-base sm:text-lg leading-relaxed">{activeProbe.text}</p>
+                    <p className="text-xs text-neutral-500 mt-3">Press <span className="text-neutral-300 font-medium">Start Session</span> below and answer this out loud.</p>
+                  </div>
+                )}
+                {!activeProbe && !openingProbeLoading && (
+                  <p className="text-neutral-600 text-sm text-center">Ready to begin</p>
+                )}
               </div>
             )}
           </div>
 
           {/* Status + Controls Row */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <RecordingIndicator isRecording={isRecording} />
-              {/* Muse connect / status */}
-              {museStatus === "disconnected" || museStatus === "connecting" ? (
-                <button
-                  onClick={handleConnectMuse}
-                  disabled={museStatus === "connecting"}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 rounded-lg border border-neutral-700 transition-colors"
-                >
-                  <BluetoothIcon />
-                  {museStatus === "connecting" ? "Connecting..." : "Connect Muse"}
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 border border-green-500/20 rounded-lg">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-[11px] text-green-400">Muse</span>
-                  </div>
-                  <button
-                    onClick={handleDisconnectMuse}
-                    className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors"
-                  >
-                    Disconnect
-                  </button>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3">
+            <RecordingIndicator isRecording={isRecording} />
+            {/* Muse connect / status */}
+            {museStatus === "disconnected" || museStatus === "connecting" ? (
+              <button
+                onClick={handleConnectMuse}
+                disabled={museStatus === "connecting"}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 rounded-lg border border-neutral-700 transition-colors"
+              >
+                <BluetoothIcon />
+                {museStatus === "connecting" ? "Connecting..." : "Muse"}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-[11px] text-green-400">Muse</span>
                 </div>
-              )}
-            </div>
+                <button
+                  onClick={handleDisconnectMuse}
+                  className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             {isRecording && (
-              <ObserverControls
-                mode={observerMode}
-                frequency={frequency}
-                onModeChange={setObserverMode}
-                onFrequencyChange={setFrequency}
-                onMute={handleMute}
-                isMuted={isMuted}
-                muteRemaining={muteRemaining}
-              />
+              <div className="ml-auto">
+                <ObserverControls
+                  mode={observerMode}
+                  frequency={frequency}
+                  onModeChange={setObserverMode}
+                  onFrequencyChange={setFrequency}
+                  onMute={handleMute}
+                  isMuted={isMuted}
+                  muteRemaining={muteRemaining}
+                />
+              </div>
             )}
           </div>
 
           {/* Muse EEG minimal status — just confirm it's recording */}
           {museStatus === "streaming" && isRecording && (
-            <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
+            <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
               <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               <span className="text-[11px] text-neutral-500">EEG recording</span>
               <span className="text-[11px] text-neutral-700">·</span>
@@ -570,7 +514,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
             });
             const allReady = detectedChannels.length >= expectedChannels.length;
             return (
-              <div className="mb-4 px-3.5 py-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
+              <div className="mb-3 px-3.5 py-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {expectedChannels.map(ch => {
@@ -592,7 +536,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
           })()}
 
           {museError && (
-            <div className="mb-4 p-2.5 bg-red-500/5 border border-red-500/20 rounded-lg text-red-400 text-[11px]">
+            <div className="mb-3 p-2.5 bg-red-500/5 border border-red-500/20 rounded-lg text-red-400 text-[11px]">
               {museError}
             </div>
           )}
@@ -617,13 +561,86 @@ export function SessionView({ sessionId }: { sessionId: string }) {
               </button>
             )}
           </div>
-
-          {error && (
-            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-              {error}
-            </div>
-          )}
         </div>
+
+        {/* Pre-session: What to expect + controls guide */}
+        {!isRecording && (
+          <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5">
+              <h3 className="text-sm font-medium text-neutral-300 mb-3">What to expect</h3>
+              <div className="space-y-2.5">
+                {[
+                  { num: "1", text: "You'll get a starting question — just start answering out loud" },
+                  { num: "2", text: "Your AI tutor will jump in with follow-up questions as you talk" },
+                  { num: "3", text: "You're in control — mute the tutor, change how often it asks, or end anytime" },
+                  { num: "4", text: "When you're done, you'll get a report with everything covered" },
+                ].map((step) => (
+                  <div key={step.num} className="flex items-start gap-3">
+                    <span className="w-5 h-5 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[10px] text-neutral-500 font-medium shrink-0 mt-0.5">{step.num}</span>
+                    <p className="text-sm text-neutral-400 leading-relaxed">{step.text}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Controls explained */}
+              <div className="mt-5 pt-4 border-t border-neutral-800/60">
+                <h4 className="text-xs font-medium text-neutral-400 mb-3">Your controls during the session</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Tutor mode */}
+                  <div className="p-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
+                    <p className="text-xs font-medium text-neutral-300 mb-1.5">Tutor mode</p>
+                    <div className="space-y-1">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Off</span> — tutor stays quiet, you talk freely</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Passive</span> — tutor listens but only jumps in when it spots a gap</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Active</span> — tutor regularly asks questions to push your thinking</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Frequency */}
+                  <div className="p-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
+                    <p className="text-xs font-medium text-neutral-300 mb-1.5">How often it asks</p>
+                    <div className="space-y-1">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
+                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Rare</span> — gives you long stretches to think on your own</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Normal</span> — a good balance of questions and space</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16M4 8h16M4 12h16M4 16h16M4 20h16" /></svg>
+                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Frequent</span> — keeps the pressure up with more questions</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mute */}
+                  <div className="p-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
+                    <p className="text-xs font-medium text-neutral-300 mb-1.5">Mute</p>
+                    <div className="flex items-start gap-2">
+                      <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
+                      <p className="text-[11px] text-neutral-500">Silences the tutor for 10 minutes so you can think without interruptions. A countdown shows how long until it comes back.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+        )}
+
+        {error && (
+          <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+            {error}
+          </div>
+        )}
       </div>
 
       {/* Tutor-End Dialog */}

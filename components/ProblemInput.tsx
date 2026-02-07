@@ -60,13 +60,13 @@ export function ProblemInput({ initialTopic }: ProblemInputProps) {
           value={problem}
           onChange={(e) => { setProblem(e.target.value); setUsageError(null); }}
           placeholder="What do you want to think through?"
-          className="w-full h-24 px-4 py-3.5 pr-32 bg-neutral-900/80 border border-neutral-800 rounded-2xl text-white text-[15px] placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none transition-colors"
+          className="w-full h-28 px-4 pt-3.5 pb-14 pr-32 bg-neutral-900/80 border border-neutral-800 rounded-2xl text-white text-[15px] placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none transition-colors"
           disabled={isLoading}
         />
         <button
           onClick={handleStart}
           disabled={!problem.trim() || isLoading}
-          className="absolute right-2.5 bottom-2.5 px-4 py-2 bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-black text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
+          className="absolute right-4 bottom-4 px-4 py-2 bg-white hover:bg-neutral-200 disabled:bg-neutral-800 disabled:text-neutral-600 text-black text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
         >
           {isLoading ? (
             <LoadingSpinner />

@@ -108,63 +108,74 @@ export function ObserverControls({
   const frequencies: Frequency[] = ["rare", "balanced", "frequent"];
 
   return (
-    <div className="flex items-center gap-2 p-2 bg-neutral-800/50 rounded-xl">
-      {/* Observer Mode */}
-      <div className="flex bg-neutral-900 rounded-lg p-0.5 gap-0.5">
-        {modes.map((m) => (
-          <button
-            key={m}
-            onClick={() => onModeChange(m)}
-            title={MODE_ICONS[m].title}
-            className={`p-2 rounded-md transition-colors ${
-              mode === m
-                ? "bg-neutral-700 text-white"
-                : "text-neutral-500 hover:text-neutral-300"
-            }`}
-          >
-            {MODE_ICONS[m].icon}
-          </button>
-        ))}
+    <div className="flex flex-col items-end gap-1.5">
+      <div className="flex items-center gap-2 p-2 bg-neutral-800/50 rounded-xl">
+        {/* Observer Mode */}
+        <div className="flex bg-neutral-900 rounded-lg p-0.5 gap-0.5">
+          {modes.map((m) => (
+            <button
+              key={m}
+              onClick={() => onModeChange(m)}
+              title={MODE_ICONS[m].title}
+              className={`p-2 rounded-md transition-colors ${
+                mode === m
+                  ? "bg-neutral-700 text-white"
+                  : "text-neutral-500 hover:text-neutral-300"
+              }`}
+            >
+              {MODE_ICONS[m].icon}
+            </button>
+          ))}
+        </div>
+
+        <div className="w-px h-6 bg-neutral-700" />
+
+        {/* Frequency */}
+        <div className="flex bg-neutral-900 rounded-lg p-0.5 gap-0.5">
+          {frequencies.map((f) => (
+            <button
+              key={f}
+              onClick={() => onFrequencyChange(f)}
+              title={FREQ_ICONS[f].title}
+              className={`p-2 rounded-md transition-colors ${
+                frequency === f
+                  ? "bg-neutral-700 text-white"
+                  : "text-neutral-500 hover:text-neutral-300"
+              }`}
+            >
+              {FREQ_ICONS[f].icon}
+            </button>
+          ))}
+        </div>
+
+        <div className="w-px h-6 bg-neutral-700" />
+
+        {/* Mute */}
+        <button
+          onClick={() => onMute(10 * 60 * 1000)}
+          disabled={isMuted}
+          title={isMuted && muteCountdown ? `Muted ${muteCountdown}` : "Mute 10 min"}
+          className={`p-2 rounded-lg transition-colors flex items-center gap-1.5 ${
+            isMuted
+              ? "bg-amber-900/30 text-amber-400"
+              : "text-neutral-500 hover:text-white"
+          }`}
+        >
+          <MuteIcon />
+          {isMuted && muteCountdown && (
+            <span className="text-xs font-mono">{muteCountdown}</span>
+          )}
+        </button>
       </div>
 
-      <div className="w-px h-6 bg-neutral-700" />
-
-      {/* Frequency */}
-      <div className="flex bg-neutral-900 rounded-lg p-0.5 gap-0.5">
-        {frequencies.map((f) => (
-          <button
-            key={f}
-            onClick={() => onFrequencyChange(f)}
-            title={FREQ_ICONS[f].title}
-            className={`p-2 rounded-md transition-colors ${
-              frequency === f
-                ? "bg-neutral-700 text-white"
-                : "text-neutral-500 hover:text-neutral-300"
-            }`}
-          >
-            {FREQ_ICONS[f].icon}
-          </button>
-        ))}
+      {/* Legend */}
+      <div className="flex items-center gap-3 text-[10px] text-neutral-600 px-1">
+        <span>Off · Passive · <span className="text-neutral-400">Active</span></span>
+        <span className="text-neutral-700">|</span>
+        <span>Rare · <span className="text-neutral-400">Normal</span> · Frequent</span>
+        <span className="text-neutral-700">|</span>
+        <span>{isMuted ? "Muted" : "Mute tutor"}</span>
       </div>
-
-      <div className="w-px h-6 bg-neutral-700" />
-
-      {/* Mute */}
-      <button
-        onClick={() => onMute(10 * 60 * 1000)}
-        disabled={isMuted}
-        title={isMuted && muteCountdown ? `Muted ${muteCountdown}` : "Mute 10 min"}
-        className={`p-2 rounded-lg transition-colors flex items-center gap-1.5 ${
-          isMuted
-            ? "bg-amber-900/30 text-amber-400"
-            : "text-neutral-500 hover:text-white"
-        }`}
-      >
-        <MuteIcon />
-        {isMuted && muteCountdown && (
-          <span className="text-xs font-mono">{muteCountdown}</span>
-        )}
-      </button>
     </div>
   );
 }

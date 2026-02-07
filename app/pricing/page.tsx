@@ -72,30 +72,30 @@ export default function PricingPage() {
   return (
     <main className="min-h-screen flex flex-col bg-[#0a0a0a]">
       {/* Header */}
-      <header className="border-b border-neutral-800/60 px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
+      <header className="border-b border-neutral-800/60 px-4 sm:px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <Link href="/" className="text-lg font-semibold text-white tracking-tight">
+          <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight">
             Socrates
           </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/" className="text-sm text-neutral-500 hover:text-white transition-colors">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <Link href="/" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
               Home
             </Link>
-            <Link href="/dashboard" className="text-sm text-neutral-500 hover:text-white transition-colors">
+            <Link href="/dashboard" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors">
               Dashboard
             </Link>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 max-w-5xl mx-auto w-full px-6 py-12">
+      <div className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-8 sm:py-12">
         {/* Open Source Banner */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
             Open source
           </div>
-          <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4 tracking-tight">
+          <h1 className="text-3xl sm:text-5xl font-bold text-white mb-4 tracking-tight">
             Simple pricing
           </h1>
           <p className="text-neutral-500 text-base max-w-lg mx-auto leading-relaxed">
