@@ -118,18 +118,19 @@ export function canStartSession(
     return { allowed: true, plan, used: sessionCount, limit: effectiveLimit, isAdmin: false };
   }
 
-  // Free plan = 1 session ever
-  const freeLimit = planDef.sessionsPerPeriod ?? 1;
-  if (sessionCount >= freeLimit) {
+  // Free plan = 1 session ever + any purchased extras
+  const freeBaseLimit = planDef.sessionsPerPeriod ?? 1;
+  const freeEffectiveLimit = freeBaseLimit + extra_lessons;
+  if (sessionCount >= freeEffectiveLimit) {
     return {
       allowed: false,
-      reason: "You've used your free session. Upgrade to continue learning with Socrates.",
+      reason: "You've used your free session. Buy an extra session or upgrade to continue learning.",
       plan: "free",
       used: sessionCount,
-      limit: freeLimit,
+      limit: freeEffectiveLimit,
       isAdmin: false,
     };
   }
 
-  return { allowed: true, plan: "free", used: sessionCount, limit: freeLimit, isAdmin: false };
+  return { allowed: true, plan: "free", used: sessionCount, limit: freeEffectiveLimit, isAdmin: false };
 }
