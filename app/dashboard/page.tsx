@@ -716,7 +716,11 @@ function SessionCard({ session, onDelete }: { session: Session; onDelete: () => 
   const durationFormatted = formatTime(Math.floor(session.durationMs / 1000));
 
   return (
-    <div className="group p-4 rounded-xl border border-neutral-800 bg-neutral-900/50 hover:bg-neutral-800/50 hover:border-neutral-700 transition-all duration-200">
+    <div className={`group p-4 rounded-xl border transition-all duration-200 ${
+      session.status === "active"
+        ? "border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 hover:border-blue-500/40"
+        : "border-neutral-800 bg-neutral-900/50 hover:bg-neutral-800/50 hover:border-neutral-700"
+    }`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -727,9 +731,7 @@ function SessionCard({ session, onDelete }: { session: Session; onDelete: () => 
               {session.problem}
             </Link>
             {session.status === "active" && (
-              <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">
-                Resume
-              </span>
+              <span className="text-[11px] text-blue-400">— tap to resume</span>
             )}
             {session.status === "ended_by_tutor" && (
               <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">
