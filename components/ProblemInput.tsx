@@ -35,14 +35,24 @@ export function ProblemInput({ initialTopic }: ProblemInputProps) {
           setIsLoading(false);
           return;
         }
+      } else {
+        // If check fails, block to be safe
+        setUsageError("Could not verify usage. Please try again.");
+        setIsLoading(false);
+        return;
       }
     } catch {
-      // Allow on network error
+      // If network fails, block to be safe
+      setUsageError("Could not verify usage. Please try again.");
+      setIsLoading(false);
+      return;
     }
 
     try {
-      // Create session in Supabase
+      // Create session in Supabase and consume an extra lesson if over base limit
       const session = await createSession(problem.trim());
+      // Consume extra lesson server-side
+      fetch("/api/check-usage", { method: "POST" }).catch(() => {});
       // Navigate to session page with DB id
       router.push(`/session?id=${session.id}`);
     } catch (err) {
