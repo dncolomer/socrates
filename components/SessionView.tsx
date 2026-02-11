@@ -821,6 +821,11 @@ export function SessionView({ sessionId }: { sessionId: string }) {
               Start Session
             </button>
           </div>
+
+          {/* Data consent disclaimer */}
+          <p className="text-[10px] sm:text-[11px] text-neutral-600 text-center mt-4 leading-relaxed px-2">
+            By starting this session, you agree to let us collect and use your voice and EEG data for research purposes and improvement of the product.
+          </p>
             </div>
 
           </>
