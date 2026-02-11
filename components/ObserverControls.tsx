@@ -108,16 +108,16 @@ export function ObserverControls({
   const frequencies: Frequency[] = ["rare", "balanced", "frequent"];
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
-      <div className="flex items-center gap-2 p-2 bg-neutral-800/50 rounded-xl">
+    <div className="flex flex-col items-stretch sm:items-end gap-1.5">
+      <div className="flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-neutral-800/50 rounded-xl w-full sm:w-auto">
         {/* Observer Mode */}
-        <div className="flex bg-neutral-900 rounded-lg p-0.5 gap-0.5">
+        <div className="flex flex-1 sm:flex-none bg-neutral-900 rounded-lg p-0.5 gap-0.5">
           {modes.map((m) => (
             <button
               key={m}
               onClick={() => onModeChange(m)}
               title={MODE_ICONS[m].title}
-              className={`p-2 rounded-md transition-colors ${
+              className={`p-2 flex-1 sm:flex-none flex items-center justify-center rounded-md transition-colors ${
                 mode === m
                   ? "bg-neutral-700 text-white"
                   : "text-neutral-500 hover:text-neutral-300"
@@ -128,16 +128,16 @@ export function ObserverControls({
           ))}
         </div>
 
-        <div className="w-px h-6 bg-neutral-700" />
+        <div className="w-px h-6 bg-neutral-700 shrink-0" />
 
         {/* Frequency */}
-        <div className="flex bg-neutral-900 rounded-lg p-0.5 gap-0.5">
+        <div className="flex flex-1 sm:flex-none bg-neutral-900 rounded-lg p-0.5 gap-0.5">
           {frequencies.map((f) => (
             <button
               key={f}
               onClick={() => onFrequencyChange(f)}
               title={FREQ_ICONS[f].title}
-              className={`p-2 rounded-md transition-colors ${
+              className={`p-2 flex-1 sm:flex-none flex items-center justify-center rounded-md transition-colors ${
                 frequency === f
                   ? "bg-neutral-700 text-white"
                   : "text-neutral-500 hover:text-neutral-300"
@@ -168,8 +168,8 @@ export function ObserverControls({
         </button>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-3 text-[10px] text-neutral-600 px-1">
+      {/* Legend -- hidden on mobile, icons are self-explanatory */}
+      <div className="hidden sm:flex items-center gap-3 text-[10px] text-neutral-600 px-1">
         <span>Off · Passive · <span className="text-neutral-400">Active</span></span>
         <span className="text-neutral-700">|</span>
         <span>Rare · <span className="text-neutral-400">Normal</span> · Frequent</span>

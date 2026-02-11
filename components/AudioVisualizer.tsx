@@ -138,7 +138,7 @@ export function AudioVisualizer({ isRecording, stream }: AudioVisualizerProps) {
   return (
     <canvas
       ref={canvasRef}
-      className="w-full h-20 rounded-lg"
+      className="w-full h-14 sm:h-20 rounded-lg"
       style={{ imageRendering: "auto" }}
     />
   );

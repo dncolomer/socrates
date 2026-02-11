@@ -186,7 +186,7 @@ export function ActiveProbe({
         <div className="absolute inset-0 rounded-2xl bg-blue-500/20 animate-probe-flash pointer-events-none z-10" />
       )}
       <div
-        className={`bg-neutral-900 border rounded-2xl p-5 h-full flex flex-col transition-all duration-500 ${
+        className={`bg-neutral-900 border rounded-2xl p-4 sm:p-5 h-full flex flex-col transition-all duration-500 ${
           animateIn
             ? flashPulse
               ? "opacity-100 translate-y-0 border-blue-400/60 shadow-[0_0_30px_rgba(59,130,246,0.3)] scale-[1.01]"
@@ -203,14 +203,14 @@ export function ActiveProbe({
           </div>
         )}
         {/* Probe content */}
-        <div className="flex items-start gap-4">
-          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-700 ${
+        <div className="flex items-start gap-3 sm:gap-4">
+          <div className={`flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-700 ${
             flashPulse ? "bg-blue-600/40 scale-110" : "bg-blue-600/20"
           }`}>
             <QuestionIcon />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-white text-base sm:text-lg leading-relaxed">{probe.text}</p>
+            <p className="text-white text-base sm:text-lg leading-relaxed break-words">{probe.text}</p>
 
             {/* Go deeper expanded content -- BLUE accent */}
             {isExpanded && (
@@ -221,12 +221,12 @@ export function ActiveProbe({
                     <span className="text-sm">Going deeper...</span>
                   </div>
                 ) : expandedContent ? (
-                  <div className="border-l-2 border-blue-500/50 pl-4">
+                  <div className="border-l-2 border-blue-500/50 pl-3 sm:pl-4 max-h-[40vh] overflow-y-auto">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
                       <span className="text-[10px] font-medium text-blue-400 uppercase tracking-wider">Go Deeper</span>
                     </div>
-                    <p className="text-blue-100/90 text-sm leading-relaxed whitespace-pre-line">
+                    <p className="text-blue-100/90 text-sm leading-relaxed whitespace-pre-line break-words">
                       {expandedContent}
                     </p>
                   </div>
@@ -237,12 +237,12 @@ export function ActiveProbe({
             {/* Ask response -- EMERALD/GREEN accent */}
             {askResponse && (
               <div className="mt-4 pt-4 border-t border-neutral-700/50">
-                <div className="border-l-2 border-emerald-500/50 pl-4">
+                <div className="border-l-2 border-emerald-500/50 pl-3 sm:pl-4 max-h-[40vh] overflow-y-auto">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                     <span className="text-[10px] font-medium text-emerald-400 uppercase tracking-wider">Answer</span>
                   </div>
-                  <p className="text-emerald-100/90 text-sm leading-relaxed whitespace-pre-line">
+                  <p className="text-emerald-100/90 text-sm leading-relaxed whitespace-pre-line break-words">
                     {askResponse}
                   </p>
                 </div>
@@ -260,7 +260,7 @@ export function ActiveProbe({
                   onKeyDown={handleAskKeyDown}
                   placeholder="Type your question..."
                   disabled={askLoading}
-                  className="flex-1 bg-neutral-800/80 border border-neutral-700/60 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 disabled:opacity-50 transition-colors"
+                  className="flex-1 min-w-0 bg-neutral-800/80 border border-neutral-700/60 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 disabled:opacity-50 transition-colors"
                 />
                 <button
                   onClick={handleAskSubmit}
@@ -270,12 +270,12 @@ export function ActiveProbe({
                   {askLoading ? (
                     <>
                       <LoadingSpinner />
-                      <span>Thinking...</span>
+                      <span className="hidden sm:inline">Thinking...</span>
                     </>
                   ) : (
                     <>
                       <SendIcon />
-                      <span>Send</span>
+                      <span className="hidden sm:inline">Send</span>
                     </>
                   )}
                 </button>
@@ -283,7 +283,7 @@ export function ActiveProbe({
             )}
 
             {/* Actions row */}
-            <div className="mt-3 flex flex-wrap items-center gap-3 sm:gap-4">
+            <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
               {/* Go deeper -- highlighted button */}
               <button
                 onClick={handleExpand}
@@ -312,7 +312,7 @@ export function ActiveProbe({
                   e.stopPropagation();
                   onToggleStar?.(probe.id, !probe.starred);
                 }}
-                className={`p-1.5 rounded-md transition-all ${
+                className={`p-2 sm:p-1.5 rounded-md transition-all ${
                   probe.starred
                     ? "text-amber-400 hover:text-amber-300"
                     : "text-neutral-600 hover:text-amber-400 hover:bg-neutral-800"
