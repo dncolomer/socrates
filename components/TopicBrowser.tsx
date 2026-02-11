@@ -8,13 +8,42 @@ interface TopicBrowserProps {
 }
 
 const ALL_LABEL = "All";
+const SCROLL_AMOUNT = 200;
 
 export function TopicBrowser({ onSelectTopic }: TopicBrowserProps) {
   const [activeFilter, setActiveFilter] = useState(ALL_LABEL);
   const [visibleTopics, setVisibleTopics] = useState<
     { topic: string; category: string; emoji: string }[]
   >([]);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    updateScrollState();
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(updateScrollState);
+    ro.observe(el);
+    el.addEventListener("scroll", updateScrollState);
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", updateScrollState);
+    };
+  }, [updateScrollState, visibleTopics]);
+
+  const scroll = (dir: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === "left" ? -SCROLL_AMOUNT : SCROLL_AMOUNT, behavior: "smooth" });
+  };
 
   const buildTopics = useCallback((filter: string) => {
     const pool: { topic: string; category: string; emoji: string }[] = [];
@@ -65,33 +94,62 @@ export function TopicBrowser({ onSelectTopic }: TopicBrowserProps) {
       </div>
 
       {/* Category filter strip */}
-      <div ref={scrollRef} className="flex gap-1.5 mb-5 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="flex items-center gap-2 mb-5">
         <button
-          data-filter={ALL_LABEL}
-          onClick={() => handleFilterClick(ALL_LABEL)}
-          className={`shrink-0 px-3 py-1.5 text-xs rounded-full border transition-colors ${
-            activeFilter === ALL_LABEL
-              ? "bg-white text-black border-white"
-              : "text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white"
+          onClick={() => scroll("left")}
+          disabled={!canScrollLeft}
+          className={`shrink-0 w-8 h-8 rounded-full border flex items-center justify-center transition-colors ${
+            canScrollLeft
+              ? "border-neutral-600 text-neutral-400 hover:border-neutral-500 hover:text-white hover:bg-neutral-800"
+              : "border-neutral-800 text-neutral-700 cursor-default"
           }`}
+          aria-label="Scroll left"
         >
-          All
+          <ChevronLeftIcon />
         </button>
-        {TOPIC_CATALOGUE.map((cat) => (
+        <div
+          ref={scrollRef}
+          className="flex-1 flex gap-1.5 overflow-x-auto scrollbar-hide scroll-smooth min-w-0"
+        >
           <button
-            key={cat.name}
-            data-filter={cat.name}
-            onClick={() => handleFilterClick(cat.name)}
-            className={`shrink-0 px-3 py-1.5 text-xs rounded-full border transition-colors inline-flex items-center gap-1.5 ${
-              activeFilter === cat.name
+            data-filter={ALL_LABEL}
+            onClick={() => handleFilterClick(ALL_LABEL)}
+            className={`shrink-0 px-3 py-1.5 text-xs rounded-full border transition-colors ${
+              activeFilter === ALL_LABEL
                 ? "bg-white text-black border-white"
                 : "text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white"
             }`}
           >
-            <span>{cat.emoji}</span>
-            <span>{cat.name}</span>
+            All
           </button>
-        ))}
+          {TOPIC_CATALOGUE.map((cat) => (
+            <button
+              key={cat.name}
+              data-filter={cat.name}
+              onClick={() => handleFilterClick(cat.name)}
+              className={`shrink-0 px-3 py-1.5 text-xs rounded-full border transition-colors inline-flex items-center gap-1.5 ${
+                activeFilter === cat.name
+                  ? "bg-white text-black border-white"
+                  : "text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white"
+              }`}
+            >
+              <span>{cat.emoji}</span>
+              <span>{cat.name}</span>
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => scroll("right")}
+          disabled={!canScrollRight}
+          className={`shrink-0 w-8 h-8 rounded-full border flex items-center justify-center transition-colors ${
+            canScrollRight
+              ? "border-neutral-600 text-neutral-400 hover:border-neutral-500 hover:text-white hover:bg-neutral-800"
+              : "border-neutral-800 text-neutral-700 cursor-default"
+          }`}
+          aria-label="Scroll right"
+        >
+          <ChevronRightIcon />
+        </button>
       </div>
 
       {/* Topic cards grid */}
@@ -127,6 +185,22 @@ function ShuffleIcon() {
         strokeWidth={2}
         d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
       />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
     </svg>
   );
 }

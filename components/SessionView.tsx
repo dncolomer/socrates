@@ -49,7 +49,6 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   const [activeProbe, setActiveProbe] = useState<Probe | null>(null);
   const [viewingProbeIndex, setViewingProbeIndex] = useState<number>(-1);
   const [openingProbeLoading, setOpeningProbeLoading] = useState(false);
-  const [autoSpeak, setAutoSpeak] = useState(false);
 
   // Session ending / saving
   const [isSaving, setIsSaving] = useState(false);
@@ -536,17 +535,16 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col max-w-5xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-5">
+      <div className="flex-1 flex flex-col min-h-0 max-w-5xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-5">
 
-        {/* Active Probe — during session */}
-        {isRecording && (
-          <div className="mb-4" ref={probeContainerRef}>
-            <ActiveProbe
+        {isRecording ? (
+          <>
+            {/* Question card — ~60% height */}
+            <div className="flex-[6] min-h-0 overflow-y-auto flex flex-col" ref={probeContainerRef}>
+              <ActiveProbe
               probe={activeProbe}
               problem={session.problem}
               isLoading={openingProbeLoading}
-              autoSpeak={autoSpeak}
-              onToggleAutoSpeak={() => setAutoSpeak((p) => !p)}
               hasPrev={canGoPrev}
               hasNext={canGoNext}
               onPrevProbe={handlePrevProbe}
@@ -554,11 +552,11 @@ export function SessionView({ sessionId }: { sessionId: string }) {
               probePosition={probeCount > 1 ? `${viewingProbeIndex + 1} / ${probeCount}` : undefined}
               onToggleStar={handleToggleStar}
             />
-          </div>
-        )}
+            </div>
 
-        {/* Recording Card */}
-        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5">
+            {/* Session controls — ~40% height */}
+            <div className="flex-[4] min-h-0 flex flex-col shrink-0">
+              <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 flex-1 flex flex-col min-h-0 overflow-y-auto">
           {/* Opening question or Audio Visualizer */}
           <div className="mb-3">
             {isRecording ? (
@@ -720,10 +718,113 @@ export function SessionView({ sessionId }: { sessionId: string }) {
             )}
           </div>
         </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Recording Card — pre-session */}
+            <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5">
+          {/* Opening question or Audio Visualizer */}
+          <div className="mb-3">
+            {openingProbeLoading && (
+              <div className="flex items-center gap-3">
+                <div className="flex gap-1 shrink-0">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
+                <p className="text-neutral-500 text-sm italic">Preparing your first question...</p>
+              </div>
+            )}
+            {activeProbe && !openingProbeLoading && (
+              <div>
+                <p className="text-[11px] uppercase tracking-wider font-medium text-blue-400/70 mb-2">Your starting question</p>
+                <p className="text-white text-base sm:text-lg leading-relaxed">{activeProbe.text}</p>
+                <p className="text-xs text-neutral-500 mt-3">Press <span className="text-neutral-300 font-medium">Start Session</span> below and answer this out loud.</p>
+              </div>
+            )}
+            {!activeProbe && !openingProbeLoading && (
+              <p className="text-neutral-600 text-sm text-center">Ready to begin</p>
+            )}
+          </div>
+
+          {/* Status + Controls Row */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3">
+            <RecordingIndicator isRecording={isRecording} />
+            {museStatus === "disconnected" || museStatus === "connecting" ? (
+              <button
+                onClick={handleConnectMuse}
+                disabled={museStatus === "connecting"}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 rounded-lg border border-neutral-700 transition-colors"
+              >
+                <BluetoothIcon />
+                {museStatus === "connecting" ? "Connecting..." : "Muse"}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-[11px] text-green-400">Muse</span>
+                </div>
+                <button
+                  onClick={handleDisconnectMuse}
+                  className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Muse EEG channel readiness — before session */}
+          {museStatus === "streaming" && !isRecording && (() => {
+            const expectedChannels = ["TP9", "AF7", "AF8", "TP10"];
+            const detectedChannels = expectedChannels.filter(ch => {
+              const samples = eegChannelData.get(ch);
+              return samples && samples.length > 0;
+            });
+            const allReady = detectedChannels.length >= expectedChannels.length;
+            return (
+              <div className="mb-3 px-3.5 py-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {expectedChannels.map(ch => {
+                      const active = detectedChannels.includes(ch);
+                      return (
+                        <div key={ch} className="flex items-center gap-1.5">
+                          <div className={`w-1.5 h-1.5 rounded-full ${active ? "bg-green-500" : "bg-neutral-700 animate-pulse"}`} />
+                          <span className={`text-[11px] font-mono ${active ? "text-green-400" : "text-neutral-600"}`}>{ch}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${allReady ? "text-green-400 bg-green-500/10 border border-green-500/20" : "text-neutral-500 bg-neutral-800/50 border border-neutral-800"}`}>
+                    {allReady ? "Ready to go" : `Waiting for channels (${detectedChannels.length}/${expectedChannels.length})`}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {museError && (
+            <div className="mb-3 p-2.5 bg-red-500/5 border border-red-500/20 rounded-lg text-red-400 text-[11px]">
+              {museError}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={startRecording}
+              className="flex-1 py-3.5 bg-white hover:bg-neutral-200 text-black font-medium rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+            >
+              <MicIcon />
+              Start Session
+            </button>
+          </div>
+            </div>
 
         {/* Pre-session: What to expect + controls guide */}
-        {!isRecording && (
-          <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5">
+          <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 overflow-y-auto">
               <h3 className="text-sm font-medium text-neutral-300 mb-3">What to expect</h3>
               <div className="space-y-2.5">
                 {[
@@ -801,6 +902,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
                 </div>
               </div>
             </div>
+          </>
         )}
 
         {error && (

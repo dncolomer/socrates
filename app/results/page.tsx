@@ -296,53 +296,62 @@ function ResultsContent() {
           </div>
         ) : null}
 
-        {/* EEG Summary */}
-        {eegSummary && (
-          <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <BrainIcon />
-              <h3 className="text-sm font-medium text-neutral-300">Muse EEG Summary</h3>
-            </div>
-
-            {/* Band powers bar chart */}
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-4">
-              {([
-                { key: "delta", label: "Delta", range: "1–4 Hz", desc: "Deep rest", color: "#6366f1" },
-                { key: "theta", label: "Theta", range: "4–8 Hz", desc: "Creativity", color: "#8b5cf6" },
-                { key: "alpha", label: "Alpha", range: "8–13 Hz", desc: "Relaxed focus", color: "#34d399" },
-                { key: "beta", label: "Beta", range: "13–30 Hz", desc: "Active thinking", color: "#fbbf24" },
-                { key: "gamma", label: "Gamma", range: "30–44 Hz", desc: "Peak focus", color: "#f472b6" },
-              ] as const).map(({ key, label, range, desc, color }) => {
-                const value = eegSummary[key] ?? 0;
-                const pct = Math.round(value * 100);
-                return (
-                  <div key={key} className="text-center">
-                    {/* Vertical bar */}
-                    <div className="h-20 flex items-end justify-center mb-2">
-                      <div
-                        className="w-6 rounded-t-md transition-all duration-500"
-                        style={{
-                          height: `${Math.max(4, pct * 0.8)}px`,
-                          backgroundColor: color,
-                          opacity: 0.8,
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs font-medium text-neutral-300">{label}</p>
-                    <p className="text-lg font-bold text-white">{pct}%</p>
-                    <p className="text-[10px] text-neutral-600">{range}</p>
-                    <p className="text-[10px] text-neutral-500 mt-0.5">{desc}</p>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Interpretation */}
-            <div className="p-3 rounded-lg bg-neutral-800/40">
-              <EEGInterpretation bands={eegSummary} />
-            </div>
+        {/* Muse EEG Data */}
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <BrainIcon />
+            <h3 className="text-sm font-medium text-neutral-300">Muse EEG Data</h3>
           </div>
-        )}
+
+          {eegSummary ? (
+            <>
+              {/* Band powers bar chart */}
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-4">
+                {([
+                  { key: "delta", label: "Delta", range: "1–4 Hz", desc: "Deep rest", color: "#6366f1" },
+                  { key: "theta", label: "Theta", range: "4–8 Hz", desc: "Creativity", color: "#8b5cf6" },
+                  { key: "alpha", label: "Alpha", range: "8–13 Hz", desc: "Relaxed focus", color: "#34d399" },
+                  { key: "beta", label: "Beta", range: "13–30 Hz", desc: "Active thinking", color: "#fbbf24" },
+                  { key: "gamma", label: "Gamma", range: "30–44 Hz", desc: "Peak focus", color: "#f472b6" },
+                ] as const).map(({ key, label, range, desc, color }) => {
+                  const value = eegSummary[key] ?? 0;
+                  const pct = Math.round(value * 100);
+                  return (
+                    <div key={key} className="text-center">
+                      {/* Vertical bar */}
+                      <div className="h-20 flex items-end justify-center mb-2">
+                        <div
+                          className="w-6 rounded-t-md transition-all duration-500"
+                          style={{
+                            height: `${Math.max(4, pct * 0.8)}px`,
+                            backgroundColor: color,
+                            opacity: 0.8,
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs font-medium text-neutral-300">{label}</p>
+                      <p className="text-lg font-bold text-white">{pct}%</p>
+                      <p className="text-[10px] text-neutral-600">{range}</p>
+                      <p className="text-[10px] text-neutral-500 mt-0.5">{desc}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Interpretation */}
+              <div className="p-3 rounded-lg bg-neutral-800/40">
+                <EEGInterpretation bands={eegSummary} />
+              </div>
+            </>
+          ) : (
+            <div className="py-8 text-center">
+              <p className="text-sm text-neutral-500">No Data</p>
+              <p className="text-xs text-neutral-600 mt-1">
+                Connect a Muse headband in the Dashboard before starting a session to record EEG data.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Report */}
         {session.report ? (

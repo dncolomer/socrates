@@ -7,8 +7,6 @@ interface ActiveProbeProps {
   probe: Probe | null;
   problem: string;
   isLoading?: boolean;
-  autoSpeak: boolean;
-  onToggleAutoSpeak: () => void;
   // Probe navigation
   hasPrev?: boolean;
   hasNext?: boolean;
@@ -23,8 +21,6 @@ export function ActiveProbe({
   probe,
   problem,
   isLoading = false,
-  autoSpeak,
-  onToggleAutoSpeak,
   hasPrev = false,
   hasNext = false,
   onPrevProbe,
@@ -35,11 +31,8 @@ export function ActiveProbe({
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedContent, setExpandedContent] = useState<string | null>(null);
   const [expandLoading, setExpandLoading] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [animateIn, setAnimateIn] = useState(false);
   const [flashPulse, setFlashPulse] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastSpokenIdRef = useRef<string | null>(null);
   const prevProbeIdRef = useRef<string | null>(null);
 
   // Ask state
@@ -75,58 +68,6 @@ export function ActiveProbe({
       }
     }
   }, [probe?.id]);
-
-  // Auto-speak new probes
-  useEffect(() => {
-    if (autoSpeak && probe && probe.id !== lastSpokenIdRef.current) {
-      lastSpokenIdRef.current = probe.id;
-      speakProbe(probe.text);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [probe?.id, autoSpeak]);
-
-  const speakProbe = async (text: string) => {
-    // Stop any current playback
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-
-    setIsSpeaking(true);
-    try {
-      const res = await fetch("/api/text-to-speech", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-
-      if (!res.ok) {
-        // TTS not available (e.g. no API key)
-        setIsSpeaking(false);
-        return;
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-
-      audio.onended = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(url);
-        audioRef.current = null;
-      };
-      audio.onerror = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(url);
-        audioRef.current = null;
-      };
-
-      await audio.play();
-    } catch {
-      setIsSpeaking(false);
-    }
-  };
 
   const handleExpand = async () => {
     if (!probe) return;
@@ -206,16 +147,6 @@ export function ActiveProbe({
     }
   };
 
-  // Cleanup audio on unmount
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, []);
-
   // Loading state -- tutor is thinking
   if (isLoading) {
     return (
@@ -243,9 +174,6 @@ export function ActiveProbe({
           <p className="text-neutral-500 text-sm">
             Your tutor is listening...
           </p>
-          <div className="ml-auto">
-            <AutoSpeakToggle enabled={autoSpeak} onToggle={onToggleAutoSpeak} />
-          </div>
         </div>
       </div>
     );
@@ -396,24 +324,28 @@ export function ActiveProbe({
 
               {/* Probe navigation */}
               {(hasPrev || hasNext) && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5 rounded-lg border border-neutral-600/60 bg-neutral-800/60 px-1.5 py-1">
                   <button
                     onClick={onPrevProbe}
                     disabled={!hasPrev}
-                    className="p-1.5 rounded-md transition-all disabled:opacity-25 disabled:cursor-default text-neutral-500 hover:text-white hover:bg-neutral-800"
+                    className={`p-1 rounded transition-all disabled:opacity-25 disabled:cursor-default ${
+                      hasPrev ? "text-neutral-200 hover:text-white hover:bg-neutral-700" : "text-neutral-600"
+                    }`}
                     title="Previous question"
                   >
                     <ChevronLeftIcon />
                   </button>
                   {probePosition && (
-                    <span className="text-[10px] text-neutral-600 tabular-nums min-w-[2.5rem] text-center">
+                    <span className="text-xs font-medium text-neutral-200 tabular-nums min-w-[2.5rem] text-center">
                       {probePosition}
                     </span>
                   )}
                   <button
                     onClick={onNextProbe}
                     disabled={!hasNext}
-                    className="p-1.5 rounded-md transition-all disabled:opacity-25 disabled:cursor-default text-neutral-500 hover:text-white hover:bg-neutral-800"
+                    className={`p-1 rounded transition-all disabled:opacity-25 disabled:cursor-default ${
+                      hasNext ? "text-neutral-200 hover:text-white hover:bg-neutral-700" : "text-neutral-600"
+                    }`}
                     title="Next question"
                   >
                     <ChevronRightIcon />
@@ -424,10 +356,6 @@ export function ActiveProbe({
               <span className="text-xs text-neutral-600">
                 Gap: {Math.round(probe.gapScore * 100)}%
               </span>
-
-              <div className="ml-auto">
-                <AutoSpeakToggle enabled={autoSpeak} onToggle={onToggleAutoSpeak} />
-              </div>
             </div>
           </div>
         </div>
@@ -437,29 +365,6 @@ export function ActiveProbe({
 }
 
 // ---- Sub-components ----
-
-function AutoSpeakToggle({
-  enabled,
-  onToggle,
-}: {
-  enabled: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      onClick={onToggle}
-      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors ${
-        enabled
-          ? "bg-blue-600/20 text-blue-400"
-          : "bg-neutral-800 text-neutral-500 hover:text-neutral-300"
-      }`}
-      title={enabled ? "Auto-speak on" : "Auto-speak off"}
-    >
-      {enabled ? <SpeakerOnIcon /> : <SpeakerOffIcon />}
-      <span>Auto</span>
-    </button>
-  );
-}
 
 function ThinkingDots() {
   return (
@@ -485,23 +390,6 @@ function ListenIcon() {
   return (
     <svg className="w-5 h-5 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-    </svg>
-  );
-}
-
-function SpeakerOnIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-    </svg>
-  );
-}
-
-function SpeakerOffIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
     </svg>
   );
 }
