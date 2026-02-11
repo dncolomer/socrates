@@ -417,21 +417,21 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       {/* Header */}
-      <header className="border-b border-neutral-800/60 px-6 py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-lg font-semibold text-white tracking-tight">Socratic Lesson</Link>
-            <span className="text-[10px] text-neutral-600 font-medium uppercase tracking-widest">Dashboard</span>
+      <header className="border-b border-neutral-800/60 px-3 sm:px-6 py-3 sm:py-4 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Link href="/" className="text-base sm:text-lg font-semibold text-white tracking-tight shrink-0">Socratic Lesson</Link>
+            <span className="text-[10px] text-neutral-600 font-medium uppercase tracking-widest hidden sm:inline">Dashboard</span>
           </div>
-          <div className="flex items-center gap-4">
-            <Link href="/pricing" className="text-sm text-neutral-500 hover:text-white transition-colors">
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            <Link href="/pricing" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors hidden sm:inline">
               Pricing
             </Link>
-            <Link href="/coaching" className="text-sm text-neutral-500 hover:text-white transition-colors">
+            <Link href="/coaching" className="text-xs sm:text-sm text-neutral-500 hover:text-white transition-colors hidden sm:inline">
               Coaching
             </Link>
             {user && (
-              <span className="text-sm text-neutral-500">
+              <span className="text-xs sm:text-sm text-neutral-500 truncate max-w-[100px] sm:max-w-none hidden sm:inline">
                 {user.username || user.email}
               </span>
             )}
@@ -445,28 +445,25 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <div className="flex-1 max-w-5xl mx-auto w-full px-6 py-8">
+      <div className="flex-1 max-w-5xl mx-auto w-full px-3 sm:px-6 py-5 sm:py-8">
         {/* Stats + New Session Row */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-          <div className="flex items-center gap-6">
-            <div>
-              <p className="text-[11px] text-neutral-600 uppercase tracking-wider">Sessions</p>
-              <p className="text-2xl font-bold text-white">{totalSessions}</p>
+        <div className="flex flex-col gap-4 mb-6 sm:mb-8">
+          <div className="grid grid-cols-4 gap-2 sm:flex sm:items-center sm:gap-6">
+            <div className="text-center sm:text-left">
+              <p className="text-[10px] sm:text-[11px] text-neutral-600 uppercase tracking-wider">Sessions</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{totalSessions}</p>
             </div>
-            <div className="w-px h-8 bg-neutral-800" />
-            <div>
-              <p className="text-[11px] text-neutral-600 uppercase tracking-wider">Time</p>
-              <p className="text-2xl font-bold text-white">{totalMinutes}m</p>
+            <div className="text-center sm:text-left">
+              <p className="text-[10px] sm:text-[11px] text-neutral-600 uppercase tracking-wider">Time</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{totalMinutes}m</p>
             </div>
-            <div className="w-px h-8 bg-neutral-800" />
-            <div>
-              <p className="text-[11px] text-neutral-600 uppercase tracking-wider">Probes</p>
-              <p className="text-2xl font-bold text-white">{allProbes}</p>
+            <div className="text-center sm:text-left">
+              <p className="text-[10px] sm:text-[11px] text-neutral-600 uppercase tracking-wider">Probes</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">{allProbes}</p>
             </div>
-            <div className="w-px h-8 bg-neutral-800" />
-            <div>
-              <p className="text-[11px] text-neutral-600 uppercase tracking-wider">Avg Gap</p>
-              <p className="text-2xl font-bold text-white">
+            <div className="text-center sm:text-left">
+              <p className="text-[10px] sm:text-[11px] text-neutral-600 uppercase tracking-wider">Avg Gap</p>
+              <p className="text-lg sm:text-2xl font-bold text-white">
                 {sessions.length > 0
                   ? `${Math.round(
                       (sessions.reduce((s, sess) => {
@@ -478,7 +475,7 @@ export default function DashboardPage() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {/* Plan badge + Buy extra */}
             {user && !user.isAdmin && user.plan !== "pro" && (
               <button
@@ -561,9 +558,9 @@ export default function DashboardPage() {
 
         {activeTab === "transcripts" && (
           <div>
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
               <div>
-                <p className="text-sm text-neutral-400">
+                <p className="text-xs sm:text-sm text-neutral-400">
                   Upload recordings of yourself thinking through problems. Your tutor
                   will learn your reasoning patterns.
                 </p>
@@ -599,11 +596,11 @@ export default function DashboardPage() {
                 transcripts.map((t) => (
                   <div
                     key={t.id}
-                    className="group flex items-center justify-between p-3.5 rounded-xl border border-neutral-800 bg-neutral-900/50 hover:bg-neutral-800/50 hover:border-neutral-700 transition-all duration-200"
+                    className="group flex items-center justify-between gap-2 p-3 sm:p-3.5 rounded-xl border border-neutral-800 bg-neutral-900/50 hover:bg-neutral-800/50 hover:border-neutral-700 transition-all duration-200"
                   >
-                    <div>
-                      <p className="text-sm text-neutral-200">{t.filename}</p>
-                      <div className="flex items-center gap-3 mt-1 text-[11px] text-neutral-600">
+                    <div className="min-w-0">
+                      <p className="text-sm text-neutral-200 truncate">{t.filename}</p>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1 text-[11px] text-neutral-600">
                         <StatusBadge status={t.status} />
                         <span>{t.chunkCount} chunks</span>
                         <span>{new Date(t.createdAt).toLocaleDateString()}</span>
@@ -611,7 +608,7 @@ export default function DashboardPage() {
                     </div>
                     <button
                       onClick={() => handleDeleteTranscript(t.id)}
-                      className="p-1.5 text-neutral-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                      className="p-1.5 text-neutral-700 hover:text-red-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shrink-0"
                     >
                       <TrashIcon />
                     </button>
@@ -624,8 +621,8 @@ export default function DashboardPage() {
 
         {activeTab === "devices" && (
           <div>
-            <div className="flex items-center justify-between mb-5">
-              <p className="text-sm text-neutral-400">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+              <p className="text-xs sm:text-sm text-neutral-400">
                 Connect a Muse EEG headband to record brain activity during sessions.
               </p>
               {museStatus === "disconnected" || museStatus === "connecting" ? (
@@ -752,11 +749,11 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-neutral-400">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="text-xs sm:text-sm text-neutral-400">
                 Customize how your tutor behaves. Edit any prompt below or reset to defaults.
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={handleResetAllPrompts}
                   className="px-3 py-1.5 text-xs text-neutral-500 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-lg transition-colors"
@@ -921,14 +918,14 @@ export default function DashboardPage() {
                 </label>
               </div>
 
-              <div className="flex items-center justify-between mt-5 pt-4 border-t border-neutral-800/60">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-5 pt-4 border-t border-neutral-800/60">
                 <p className="text-[11px] text-neutral-700">
                   You can change this at any time. Changes apply to future sessions only.
                 </p>
                 <button
                   onClick={handleSaveDataPrefs}
                   disabled={dataPrefsSaving}
-                  className="px-3.5 py-1.5 text-xs bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white rounded-lg transition-colors"
+                  className="shrink-0 px-3.5 py-1.5 text-xs bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white rounded-lg transition-colors"
                 >
                   {dataPrefsSaving ? "Saving..." : dataPrefsSaved ? "Saved!" : "Save preferences"}
                 </button>
@@ -987,30 +984,30 @@ function SessionCard({ session, onDelete }: { session: Session; onDelete: () => 
   const durationFormatted = formatTime(Math.floor(session.durationMs / 1000));
 
   return (
-    <div className={`group p-4 rounded-xl border transition-all duration-200 ${
+    <div className={`group p-3 sm:p-4 rounded-xl border transition-all duration-200 ${
       session.status === "active"
         ? "border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 hover:border-blue-500/40"
         : "border-neutral-800 bg-neutral-900/50 hover:bg-neutral-800/50 hover:border-neutral-700"
     }`}>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
             <Link
               href={session.status === "active" ? `/session?id=${session.id}` : `/results?id=${session.id}`}
-              className="text-[15px] font-medium text-neutral-200 group-hover:text-white transition-colors line-clamp-1"
+              className="text-sm sm:text-[15px] font-medium text-neutral-200 group-hover:text-white transition-colors line-clamp-2 sm:line-clamp-1"
             >
               {session.problem}
             </Link>
             {session.status === "active" && (
-              <span className="text-[11px] text-blue-400">— tap to resume</span>
+              <span className="text-[11px] text-blue-400 shrink-0">— tap to resume</span>
             )}
             {session.status === "ended_by_tutor" && (
-              <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">
+              <span className="shrink-0 self-start px-1.5 py-0.5 text-[10px] rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">
                 Ended by tutor
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 mt-2 text-xs text-neutral-600">
+          <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-0.5 mt-1.5 sm:mt-2 text-[11px] sm:text-xs text-neutral-600">
             <span>
               {new Date(session.startedAt).toLocaleDateString("en-US", {
                 month: "short",
@@ -1039,7 +1036,7 @@ function SessionCard({ session, onDelete }: { session: Session; onDelete: () => 
         </div>
         <button
           onClick={onDelete}
-          className="p-1.5 text-neutral-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+          className="p-1.5 text-neutral-700 hover:text-red-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
           title="Delete session"
         >
           <TrashIcon />
