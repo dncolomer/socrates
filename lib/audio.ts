@@ -24,6 +24,7 @@ const DEFAULT_CONFIG: AudioRecorderConfig = {
 export class AudioRecorder {
   private mediaRecorder: MediaRecorder | null = null;
   private stream: MediaStream | null = null;
+  private ownsStream: boolean = false;
   private chunks: AudioChunk[] = [];
   private allChunks: Blob[] = [];
   private config: AudioRecorderConfig;
@@ -34,19 +35,25 @@ export class AudioRecorder {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
-  async start(): Promise<void> {
+  async start(existingStream?: MediaStream): Promise<void> {
     if (this.isRecording) {
       throw new Error("Already recording");
     }
 
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 48000,
-        },
-      });
+      if (existingStream) {
+        this.stream = existingStream;
+        this.ownsStream = false;
+      } else {
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 48000,
+          },
+        });
+        this.ownsStream = true;
+      }
 
       const mimeType = this.getSupportedMimeType();
 
@@ -100,10 +107,11 @@ export class AudioRecorder {
   }
 
   private cleanup(): void {
-    if (this.stream) {
+    if (this.stream && this.ownsStream) {
       this.stream.getTracks().forEach((track) => track.stop());
-      this.stream = null;
     }
+    this.stream = null;
+    this.ownsStream = false;
     this.mediaRecorder = null;
   }
 

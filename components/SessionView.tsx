@@ -39,6 +39,10 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Mic check
+  const [micStatus, setMicStatus] = useState<"idle" | "checking" | "ready" | "denied">("idle");
+  const micStreamRef = useRef<MediaStream | null>(null);
+
   // Observer controls
   const [observerMode, setObserverMode] = useState<ObserverMode>("active");
   const [frequency, setFrequency] = useState<Frequency>("balanced");
@@ -292,15 +296,46 @@ export function SessionView({ sessionId }: { sessionId: string }) {
     }
   }, []);
 
+  const checkMicrophone = async () => {
+    setMicStatus("checking");
+    setError(null);
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 48000,
+        },
+      });
+      micStreamRef.current = mediaStream;
+      setMicStatus("ready");
+    } catch {
+      setMicStatus("denied");
+      setError("Microphone access denied. Please allow microphone permission in your browser settings and try again.");
+    }
+  };
+
   const startRecording = async () => {
     try {
       setError(null);
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Reuse the mic-checked stream, or request a new one
+      let mediaStream = micStreamRef.current;
+      if (!mediaStream || mediaStream.getTracks().some(t => t.readyState === "ended")) {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 48000,
+          },
+        });
+      }
+      micStreamRef.current = null; // hand off ownership
       setStream(mediaStream);
 
       const recorder = new AudioRecorder({ chunkDurationMs: 5000, maxBufferDurationMs: 30000 });
       recorderRef.current = recorder;
-      await recorder.start();
+      await recorder.start(mediaStream);
       setIsRecording(true);
 
       const startTime = Date.now();
@@ -494,6 +529,10 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       if (timerRef.current) clearInterval(timerRef.current);
       if (analysisRef.current) clearInterval(analysisRef.current);
       if (muteTimerRef.current) clearTimeout(muteTimerRef.current);
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(t => t.stop());
+        micStreamRef.current = null;
+      }
       handleDisconnectMuse();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -812,15 +851,55 @@ export function SessionView({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
-          <div className="flex gap-3">
-            <button
-              onClick={startRecording}
-              className="flex-1 py-3.5 bg-white hover:bg-neutral-200 text-black font-medium rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
-            >
-              <MicIcon />
-              Start Session
-            </button>
-          </div>
+          {/* Mic check + Start */}
+          {micStatus === "ready" ? (
+            <>
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-green-500/5 border border-green-500/20">
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-[11px] text-green-400 font-medium">Microphone ready</span>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={startRecording}
+                  className="flex-1 py-3.5 bg-white hover:bg-neutral-200 text-black font-medium rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+                >
+                  <MicIcon />
+                  Start Session
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                onClick={checkMicrophone}
+                disabled={micStatus === "checking"}
+                className="flex-1 py-3.5 bg-white hover:bg-neutral-200 disabled:opacity-70 text-black font-medium rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                {micStatus === "checking" ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                    Checking...
+                  </>
+                ) : micStatus === "denied" ? (
+                  <>
+                    <MicIcon />
+                    Retry Microphone
+                  </>
+                ) : (
+                  <>
+                    <MicIcon />
+                    Check Microphone
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {micStatus === "denied" && (
+            <div className="mt-3 p-2.5 bg-red-500/5 border border-red-500/20 rounded-lg text-red-400 text-[11px] leading-relaxed">
+              Microphone access was denied. Please allow microphone permission in your browser settings, then tap &quot;Retry Microphone&quot;.
+            </div>
+          )}
 
           {/* Data consent disclaimer */}
           <p className="text-[10px] sm:text-[11px] text-neutral-600 text-center mt-4 leading-relaxed px-2">
