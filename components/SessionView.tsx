@@ -723,7 +723,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         ) : (
           <>
             {/* Recording Card — pre-session */}
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5">
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-5 sm:p-8">
           {/* Opening question or Audio Visualizer */}
           <div className="mb-3">
             {openingProbeLoading && (
@@ -737,10 +737,10 @@ export function SessionView({ sessionId }: { sessionId: string }) {
               </div>
             )}
             {activeProbe && !openingProbeLoading && (
-              <div>
-                <p className="text-[11px] uppercase tracking-wider font-medium text-blue-400/70 mb-2">Your starting question</p>
-                <p className="text-white text-base sm:text-lg leading-relaxed">{activeProbe.text}</p>
-                <p className="text-xs text-neutral-500 mt-3">Press <span className="text-neutral-300 font-medium">Start Session</span> below and answer this out loud.</p>
+              <div className="py-4 sm:py-6">
+                <p className="text-[11px] uppercase tracking-wider font-semibold text-blue-400 mb-3">Your starting question</p>
+                <p className="text-white text-xl sm:text-2xl font-medium leading-relaxed">{activeProbe.text}</p>
+                <p className="text-sm text-neutral-500 mt-4">Press <span className="text-white font-medium">Start Session</span> below and answer this out loud.</p>
               </div>
             )}
             {!activeProbe && !openingProbeLoading && (
@@ -823,85 +823,6 @@ export function SessionView({ sessionId }: { sessionId: string }) {
           </div>
             </div>
 
-        {/* Pre-session: What to expect + controls guide */}
-          <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 overflow-y-auto">
-              <h3 className="text-sm font-medium text-neutral-300 mb-3">What to expect</h3>
-              <div className="space-y-2.5">
-                {[
-                  { num: "1", text: "You'll get a starting question — just start answering out loud" },
-                  { num: "2", text: "Your AI tutor will jump in with follow-up questions as you talk" },
-                  { num: "3", text: "You're in control — mute the tutor, change how often it asks, or end anytime" },
-                  { num: "4", text: "When you're done, you'll get a report with everything covered" },
-                ].map((step) => (
-                  <div key={step.num} className="flex items-start gap-3">
-                    <span className="w-5 h-5 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[10px] text-neutral-500 font-medium shrink-0 mt-0.5">{step.num}</span>
-                    <p className="text-sm text-neutral-400 leading-relaxed">{step.text}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Controls explained */}
-              <div className="mt-5 pt-4 border-t border-neutral-800/60">
-                <h4 className="text-xs font-medium text-neutral-400 mb-3">Your controls during the session</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Tutor mode */}
-                  <div className="p-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
-                    <p className="text-xs font-medium text-neutral-300 mb-1.5">Tutor mode</p>
-                    <div className="space-y-1">
-                      <div className="flex items-start gap-2">
-                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
-                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Off</span> — tutor stays quiet, you talk freely</p>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Passive</span> — tutor listens but only jumps in when it spots a gap</p>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Active</span> — tutor regularly asks questions to push your thinking</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Frequency */}
-                  <div className="p-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
-                    <p className="text-xs font-medium text-neutral-300 mb-1.5">How often it asks</p>
-                    <div className="space-y-1">
-                      <div className="flex items-start gap-2">
-                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Rare</span> — gives you long stretches to think on your own</p>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
-                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Normal</span> — a good balance of questions and space</p>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16M4 8h16M4 12h16M4 16h16M4 20h16" /></svg>
-                        <p className="text-[11px] text-neutral-500"><span className="text-neutral-400">Frequent</span> — keeps the pressure up with more questions</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Mute */}
-                  <div className="p-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
-                    <p className="text-xs font-medium text-neutral-300 mb-1.5">Mute</p>
-                    <div className="flex items-start gap-2">
-                      <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
-                      <p className="text-[11px] text-neutral-500">Silences the tutor for 10 minutes so you can think without interruptions. A countdown shows how long until it comes back.</p>
-                    </div>
-                  </div>
-
-                  {/* Nudge Tutor */}
-                  <div className="p-3 rounded-lg bg-neutral-800/30 border border-neutral-800/50">
-                    <p className="text-xs font-medium text-neutral-300 mb-1.5">Nudge Tutor</p>
-                    <div className="flex items-start gap-2">
-                      <svg className="w-3.5 h-3.5 text-neutral-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                      <p className="text-[11px] text-neutral-500">Prompts the tutor to jump in with a follow-up question right now. Use the button or press <kbd className="px-1 py-0.5 text-[10px] bg-neutral-700/60 rounded border border-neutral-600/40 font-mono text-neutral-400">Space</kbd> on your keyboard.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </>
         )}
 
