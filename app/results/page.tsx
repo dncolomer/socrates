@@ -233,29 +233,35 @@ function ResultsContent() {
         </div>
 
         {/* Audio Player */}
-        {session.hasAudio && (
-          <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-neutral-300">Session Recording</h3>
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-neutral-300">Session Recording</h3>
+            {session.hasAudio && audioBlob && (
               <button
                 onClick={handleDownloadAudio}
-                disabled={!audioBlob}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 rounded-lg border border-neutral-700 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg border border-neutral-700 transition-colors"
               >
                 <DownloadIcon />
                 Download
               </button>
-            </div>
-            {audioBlob && (
-              <audio
-                controls
-                src={URL.createObjectURL(audioBlob)}
-                className="w-full h-10"
-                style={{ filter: "invert(1) hue-rotate(180deg)", opacity: 0.7 }}
-              />
             )}
           </div>
-        )}
+          {session.hasAudio && audioBlob ? (
+            <audio
+              controls
+              src={URL.createObjectURL(audioBlob)}
+              className="w-full h-10"
+              style={{ filter: "invert(1) hue-rotate(180deg)", opacity: 0.7 }}
+            />
+          ) : (
+            <div className="py-6 text-center">
+              <p className="text-sm text-neutral-500">No Recording Available</p>
+              <p className="text-xs text-neutral-600 mt-1">
+                Audio could not be saved for this session. This may be due to browser permissions or a storage issue.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Transcript */}
         {session.transcript ? (
