@@ -511,7 +511,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
+    <div className="h-screen flex flex-col bg-[#0a0a0a] overflow-hidden">
       {/* Header */}
       <header className="border-b border-neutral-800/60 px-3 sm:px-4 py-3 backdrop-blur-sm bg-[#0a0a0a]/80 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
@@ -535,12 +535,12 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-0 max-w-5xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-5">
+      <div className={`max-w-5xl mx-auto w-full px-4 sm:px-6 ${isRecording ? "flex-1 flex flex-col min-h-0 py-2 gap-2" : "py-4 sm:py-5"}`}>
 
         {isRecording ? (
           <>
-            {/* Question card — ~60% height */}
-            <div className="flex-[6] min-h-0 overflow-y-auto flex flex-col" ref={probeContainerRef}>
+            {/* Question card — fills remaining space */}
+            <div className="flex-1 min-h-0 overflow-y-auto" ref={probeContainerRef}>
               <ActiveProbe
               probe={activeProbe}
               problem={session.problem}
@@ -554,8 +554,8 @@ export function SessionView({ sessionId }: { sessionId: string }) {
             />
             </div>
 
-            {/* Session controls — ~40% height */}
-            <div className="flex-[4] min-h-0 flex flex-col shrink-0">
+            {/* Session controls — pinned to bottom */}
+            <div className="shrink-0 flex flex-col">
               <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 flex-1 flex flex-col min-h-0 overflow-y-auto">
           {/* Opening question or Audio Visualizer */}
           <div className="mb-3">

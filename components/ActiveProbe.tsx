@@ -150,8 +150,8 @@ export function ActiveProbe({
   // Loading state -- tutor is thinking
   if (isLoading) {
     return (
-      <div className="w-full">
-        <div className="bg-neutral-900/80 border border-neutral-700/50 rounded-2xl p-6 flex items-center gap-4">
+      <div className="w-full h-full">
+        <div className="bg-neutral-900/80 border border-neutral-700/50 rounded-2xl p-6 h-full flex items-center gap-4">
           <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center">
             <ThinkingDots />
           </div>
@@ -166,8 +166,8 @@ export function ActiveProbe({
   // No probe yet -- listening state
   if (!probe) {
     return (
-      <div className="w-full">
-        <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-2xl p-6 flex items-center gap-4">
+      <div className="w-full h-full">
+        <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-2xl p-6 h-full flex items-center gap-4">
           <div className="flex-shrink-0 w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center">
             <ListenIcon />
           </div>
@@ -180,13 +180,13 @@ export function ActiveProbe({
   }
 
   return (
-    <div className="w-full relative">
+    <div className="w-full h-full relative">
       {/* Full-width flash overlay on new probe */}
       {flashPulse && (
         <div className="absolute inset-0 rounded-2xl bg-blue-500/20 animate-probe-flash pointer-events-none z-10" />
       )}
       <div
-        className={`bg-neutral-900 border rounded-2xl p-5 transition-all duration-500 ${
+        className={`bg-neutral-900 border rounded-2xl p-5 h-full flex flex-col transition-all duration-500 ${
           animateIn
             ? flashPulse
               ? "opacity-100 translate-y-0 border-blue-400/60 shadow-[0_0_30px_rgba(59,130,246,0.3)] scale-[1.01]"
