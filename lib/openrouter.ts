@@ -115,6 +115,21 @@ Rules:
 - Make them progressively deeper.
 
 Return the questions as a numbered list, nothing else.`,
+
+  ask_question: `You are a knowledgeable tutor helping a student who is working through a problem using the Socratic method.
+
+Problem they're working on: {problem}
+The current Socratic question being explored: "{probe}"
+
+The student has asked you a direct question:
+"{question}"
+
+Answer their question clearly and helpfully. Rules:
+- Be concise but thorough (2-4 paragraphs max).
+- If the question is about the problem or the Socratic probe, give a substantive answer.
+- If the question is off-topic, gently redirect to the problem at hand.
+- Use examples when helpful.
+- Be encouraging and supportive.`,
 } as const;
 
 export type PromptKey = keyof typeof DEFAULT_PROMPTS;
@@ -154,6 +169,10 @@ export const PROMPT_META: Record<PromptKey, { label: string; description: string
   expand_probe: {
     label: "Expand Probe",
     description: "Generates follow-up questions when user clicks 'Go deeper'. Variables: {problem}, {probe}",
+  },
+  ask_question: {
+    label: "Ask Question",
+    description: "Answers a direct question from the student. Variables: {problem}, {probe}, {question}",
   },
 };
 
@@ -617,6 +636,20 @@ Output ONLY the transcript text, nothing else.`;
 }
 
 // ============================================
+// AVAILABLE MODELS (for user selection in Dashboard)
+// ============================================
+
+export const AVAILABLE_MODELS = [
+  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", description: "Fast & capable" },
+  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", description: "Most capable Google model" },
+  { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4", description: "Balanced Anthropic model" },
+  { id: "openai/gpt-4o", label: "GPT-4o", description: "OpenAI flagship" },
+  { id: "meta-llama/llama-3.1-70b-instruct", label: "Llama 3.1 70B", description: "Open-source, fast" },
+] as const;
+
+export type ModelId = (typeof AVAILABLE_MODELS)[number]["id"] | string;
+
+// ============================================
 // EXPAND PROBE
 // ============================================
 
@@ -666,6 +699,65 @@ export async function expandProbe(options: {
     return { success: true, expanded };
   } catch (error) {
     console.error("Expand probe failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+// ============================================
+// ASK QUESTION (Direct question from student)
+// ============================================
+
+export async function askQuestion(options: {
+  problem: string;
+  probe: string;
+  question: string;
+  model?: string;
+  promptOverrides?: UserPrompts;
+}): Promise<{ success: boolean; answer?: string; error?: string }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey) {
+    return { success: false, error: "OPENROUTER_API_KEY not configured" };
+  }
+
+  const prompt = getPrompt("ask_question", options.promptOverrides)
+    .replace("{problem}", options.problem)
+    .replace("{probe}", options.probe)
+    .replace("{question}", options.question);
+
+  const selectedModel = options.model || MODEL;
+
+  try {
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "Socrates",
+      },
+      body: JSON.stringify({
+        model: selectedModel,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 800,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      return { success: false, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const answer = data.choices?.[0]?.message?.content?.trim();
+
+    if (!answer) {
+      return { success: false, error: "No answer generated" };
+    }
+
+    return { success: true, answer };
+  } catch (error) {
+    console.error("Ask question failed:", error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }

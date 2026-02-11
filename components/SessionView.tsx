@@ -11,6 +11,7 @@ import {
   saveSession,
   saveSessionAudio,
   saveSessionEEG,
+  toggleProbeStarred,
   type Session,
   type Probe,
   type ObserverMode,
@@ -46,6 +47,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
 
   // Probes
   const [activeProbe, setActiveProbe] = useState<Probe | null>(null);
+  const [viewingProbeIndex, setViewingProbeIndex] = useState<number>(-1);
   const [openingProbeLoading, setOpeningProbeLoading] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
 
@@ -122,12 +124,14 @@ export function SessionView({ sessionId }: { sessionId: string }) {
               setSession(updated);
               sessionRef.current = updated;
               setActiveProbe(savedProbe);
+              setViewingProbeIndex(updated.probes.length - 1);
             }
           } catch { /* opening probe is optional */ }
           finally { if (!cancelled) setOpeningProbeLoading(false); }
         } else {
           // Session already has probes (e.g. page refresh) — show the latest
           setActiveProbe(s.probes[s.probes.length - 1]);
+          setViewingProbeIndex(s.probes.length - 1);
         }
       } else {
         router.push("/");
@@ -255,6 +259,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
           sessionRef.current = updatedSession;
 
           setActiveProbe(savedProbe);
+          setViewingProbeIndex(updatedSession.probes.length - 1);
           lastProbeTimeRef.current = Date.now();
         }
       }
@@ -410,6 +415,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         setSession(updatedSession);
         sessionRef.current = updatedSession;
         setActiveProbe(savedProbe);
+        setViewingProbeIndex(updatedSession.probes.length - 1);
         lastProbeTimeRef.current = Date.now();
       }
     } catch (err) {
@@ -433,6 +439,45 @@ export function SessionView({ sessionId }: { sessionId: string }) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isRecording, handleForceProbe]);
+
+  // Probe navigation
+  const probeCount = session?.probes.length ?? 0;
+  const canGoPrev = viewingProbeIndex > 0;
+  const canGoNext = viewingProbeIndex < probeCount - 1;
+
+  const handlePrevProbe = () => {
+    if (!session || viewingProbeIndex <= 0) return;
+    const newIdx = viewingProbeIndex - 1;
+    setViewingProbeIndex(newIdx);
+    setActiveProbe(session.probes[newIdx]);
+  };
+
+  const handleNextProbe = () => {
+    if (!session || viewingProbeIndex >= session.probes.length - 1) return;
+    const newIdx = viewingProbeIndex + 1;
+    setViewingProbeIndex(newIdx);
+    setActiveProbe(session.probes[newIdx]);
+  };
+
+  const handleToggleStar = async (probeId: string, starred: boolean) => {
+    if (!session) return;
+
+    // Update local state immediately
+    const updatedProbes = session.probes.map((p) =>
+      p.id === probeId ? { ...p, starred } : p
+    );
+    const updatedSession = { ...session, probes: updatedProbes };
+    setSession(updatedSession);
+    sessionRef.current = updatedSession;
+
+    // Update the active probe if it's the one being starred
+    if (activeProbe?.id === probeId) {
+      setActiveProbe({ ...activeProbe, starred });
+    }
+
+    // Persist to DB (non-blocking)
+    toggleProbeStarred(probeId, starred).catch(() => {});
+  };
 
   const handleConfirmEnd = async () => {
     setShowEndDialog(false);
@@ -502,6 +547,12 @@ export function SessionView({ sessionId }: { sessionId: string }) {
               isLoading={openingProbeLoading}
               autoSpeak={autoSpeak}
               onToggleAutoSpeak={() => setAutoSpeak((p) => !p)}
+              hasPrev={canGoPrev}
+              hasNext={canGoNext}
+              onPrevProbe={handlePrevProbe}
+              onNextProbe={handleNextProbe}
+              probePosition={probeCount > 1 ? `${viewingProbeIndex + 1} / ${probeCount}` : undefined}
+              onToggleStar={handleToggleStar}
             />
           </div>
         )}

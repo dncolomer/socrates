@@ -9,7 +9,7 @@ import { getSessions, deleteSession, getSessionStats, type Session } from "@/lib
 import { formatTime } from "@/lib/utils";
 import { EEGWaveView } from "@/components/EEGWaveView";
 import { BrainStateBar } from "@/components/BrainStateBar";
-import { DEFAULT_PROMPTS, PROMPT_META, type PromptKey, type UserPrompts } from "@/lib/openrouter";
+import { DEFAULT_PROMPTS, PROMPT_META, AVAILABLE_MODELS, type PromptKey, type UserPrompts } from "@/lib/openrouter";
 
 type Tab = "sessions" | "transcripts" | "devices" | "prompts" | "data";
 
@@ -46,6 +46,11 @@ export default function DashboardPage() {
   const [userPrompts, setUserPrompts] = useState<UserPrompts>({});
   const [promptsSaving, setPromptsSaving] = useState(false);
   const [promptsSaved, setPromptsSaved] = useState(false);
+
+  // Ask Model
+  const [askModel, setAskModel] = useState<string>(AVAILABLE_MODELS[0].id);
+  const [modelSaving, setModelSaving] = useState(false);
+  const [modelSaved, setModelSaved] = useState(false);
 
   // Data & Privacy
   const [dataPrefs, setDataPrefs] = useState<DataSharingPrefs>({ share_transcripts: false, share_audio: false });
@@ -89,6 +94,9 @@ export default function DashboardPage() {
         }
         if (profile.metadata?.prompts) {
           setUserPrompts(profile.metadata.prompts as UserPrompts);
+        }
+        if (profile.metadata?.ask_model) {
+          setAskModel(profile.metadata.ask_model as string);
         }
         if (profile.metadata?.data_sharing) {
           setDataPrefs(profile.metadata.data_sharing as DataSharingPrefs);
@@ -307,6 +315,38 @@ export default function DashboardPage() {
       // silent
     } finally {
       setPromptsSaving(false);
+    }
+  };
+
+  const handleSaveModel = async (modelId: string) => {
+    setAskModel(modelId);
+    setModelSaving(true);
+    setModelSaved(false);
+    try {
+      const supabase = createClient();
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      // Fetch current metadata to merge
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("metadata")
+        .eq("id", authUser.id)
+        .single();
+
+      const currentMeta = profile?.metadata || {};
+
+      await supabase
+        .from("profiles")
+        .update({ metadata: { ...currentMeta, ask_model: modelId } })
+        .eq("id", authUser.id);
+
+      setModelSaved(true);
+      setTimeout(() => setModelSaved(false), 3000);
+    } catch {
+      // silent
+    } finally {
+      setModelSaving(false);
     }
   };
 
@@ -674,6 +714,44 @@ export default function DashboardPage() {
 
         {activeTab === "prompts" && (
           <div className="space-y-5">
+            {/* Model selector for Ask feature */}
+            <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="text-sm font-medium text-neutral-200">Ask Model</h4>
+                  <p className="text-[11px] text-neutral-600 mt-0.5">
+                    Choose which LLM answers your &ldquo;Ask&rdquo; questions during sessions.
+                  </p>
+                </div>
+                {modelSaved && (
+                  <span className="text-xs text-green-400">Saved!</span>
+                )}
+                {modelSaving && (
+                  <span className="text-xs text-neutral-500">Saving...</span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {AVAILABLE_MODELS.map((model) => (
+                  <button
+                    key={model.id}
+                    onClick={() => handleSaveModel(model.id)}
+                    className={`text-left p-3 rounded-lg border transition-all duration-200 ${
+                      askModel === model.id
+                        ? "border-emerald-500/40 bg-emerald-500/10 shadow-[0_0_12px_rgba(16,185,129,0.1)]"
+                        : "border-neutral-800 hover:border-neutral-600 hover:bg-neutral-800/50"
+                    }`}
+                  >
+                    <p className={`text-xs font-medium ${
+                      askModel === model.id ? "text-emerald-400" : "text-neutral-300"
+                    }`}>
+                      {model.label}
+                    </p>
+                    <p className="text-[10px] text-neutral-600 mt-0.5">{model.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center justify-between">
               <p className="text-sm text-neutral-400">
                 Customize how your tutor behaves. Edit any prompt below or reset to defaults.

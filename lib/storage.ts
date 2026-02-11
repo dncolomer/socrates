@@ -14,6 +14,7 @@ export interface Probe {
   signals: string[];
   text: string;
   expandedText?: string;
+  starred?: boolean;
 }
 
 export type SessionStatus = "active" | "completed" | "ended_by_tutor";
@@ -70,6 +71,7 @@ function mapDbProbe(p: any): Probe {
     signals: p.signals || [],
     text: p.text,
     expandedText: p.expanded_text ?? undefined,
+    starred: p.starred ?? false,
   };
 }
 
@@ -223,6 +225,14 @@ export async function updateProbeExpanded(probeId: string, expandedText: string)
   await supabase
     .from("probes")
     .update({ expanded_text: expandedText })
+    .eq("id", probeId);
+}
+
+export async function toggleProbeStarred(probeId: string, starred: boolean): Promise<void> {
+  const supabase = createClient();
+  await supabase
+    .from("probes")
+    .update({ starred })
     .eq("id", probeId);
 }
 

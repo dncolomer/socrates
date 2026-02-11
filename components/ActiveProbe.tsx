@@ -9,6 +9,14 @@ interface ActiveProbeProps {
   isLoading?: boolean;
   autoSpeak: boolean;
   onToggleAutoSpeak: () => void;
+  // Probe navigation
+  hasPrev?: boolean;
+  hasNext?: boolean;
+  onPrevProbe?: () => void;
+  onNextProbe?: () => void;
+  probePosition?: string; // e.g. "2 / 5"
+  // Star
+  onToggleStar?: (probeId: string, starred: boolean) => void;
 }
 
 export function ActiveProbe({
@@ -17,6 +25,12 @@ export function ActiveProbe({
   isLoading = false,
   autoSpeak,
   onToggleAutoSpeak,
+  hasPrev = false,
+  hasNext = false,
+  onPrevProbe,
+  onNextProbe,
+  probePosition,
+  onToggleStar,
 }: ActiveProbeProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedContent, setExpandedContent] = useState<string | null>(null);
@@ -28,6 +42,13 @@ export function ActiveProbe({
   const lastSpokenIdRef = useRef<string | null>(null);
   const prevProbeIdRef = useRef<string | null>(null);
 
+  // Ask state
+  const [showAskInput, setShowAskInput] = useState(false);
+  const [askText, setAskText] = useState("");
+  const [askResponse, setAskResponse] = useState<string | null>(null);
+  const [askLoading, setAskLoading] = useState(false);
+  const askInputRef = useRef<HTMLInputElement>(null);
+
   // Animate in when probe changes
   useEffect(() => {
     if (probe) {
@@ -37,6 +58,9 @@ export function ActiveProbe({
       setAnimateIn(false);
       setIsExpanded(false);
       setExpandedContent(null);
+      setShowAskInput(false);
+      setAskText("");
+      setAskResponse(null);
 
       // Trigger animation on next frame
       requestAnimationFrame(() => {
@@ -135,6 +159,53 @@ export function ActiveProbe({
     }
   };
 
+  const handleAskToggle = () => {
+    setShowAskInput(!showAskInput);
+    if (!showAskInput) {
+      // Focus input after it renders
+      setTimeout(() => askInputRef.current?.focus(), 50);
+    }
+  };
+
+  const handleAskSubmit = async () => {
+    if (!probe || !askText.trim()) return;
+
+    setAskLoading(true);
+    try {
+      const res = await fetch("/api/ask-probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          problem,
+          probe: probe.text,
+          question: askText.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        const { answer } = await res.json();
+        setAskResponse(answer);
+        setShowAskInput(false);
+      } else {
+        setAskResponse("Could not get an answer. Please try again.");
+      }
+    } catch {
+      setAskResponse("Could not get an answer. Please try again.");
+    } finally {
+      setAskLoading(false);
+    }
+  };
+
+  const handleAskKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleAskSubmit();
+    }
+    if (e.key === "Escape") {
+      setShowAskInput(false);
+    }
+  };
+
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
@@ -213,44 +284,142 @@ export function ActiveProbe({
           <div className="flex-1 min-w-0">
             <p className="text-white text-base sm:text-lg leading-relaxed">{probe.text}</p>
 
-            {/* Expanded content */}
+            {/* Go deeper expanded content -- BLUE accent */}
             {isExpanded && (
               <div className="mt-4 pt-4 border-t border-neutral-700/50">
                 {expandLoading ? (
-                  <div className="flex items-center gap-2 text-neutral-400">
+                  <div className="flex items-center gap-2 text-blue-400">
                     <LoadingSpinner />
                     <span className="text-sm">Going deeper...</span>
                   </div>
                 ) : expandedContent ? (
-                  <p className="text-neutral-300 text-sm leading-relaxed whitespace-pre-line">
-                    {expandedContent}
-                  </p>
+                  <div className="border-l-2 border-blue-500/50 pl-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                      <span className="text-[10px] font-medium text-blue-400 uppercase tracking-wider">Go Deeper</span>
+                    </div>
+                    <p className="text-blue-100/90 text-sm leading-relaxed whitespace-pre-line">
+                      {expandedContent}
+                    </p>
+                  </div>
                 ) : null}
+              </div>
+            )}
+
+            {/* Ask response -- EMERALD/GREEN accent */}
+            {askResponse && (
+              <div className="mt-4 pt-4 border-t border-neutral-700/50">
+                <div className="border-l-2 border-emerald-500/50 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className="text-[10px] font-medium text-emerald-400 uppercase tracking-wider">Answer</span>
+                  </div>
+                  <p className="text-emerald-100/90 text-sm leading-relaxed whitespace-pre-line">
+                    {askResponse}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Ask input bar */}
+            {showAskInput && (
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  ref={askInputRef}
+                  type="text"
+                  value={askText}
+                  onChange={(e) => setAskText(e.target.value)}
+                  onKeyDown={handleAskKeyDown}
+                  placeholder="Type your question..."
+                  disabled={askLoading}
+                  className="flex-1 bg-neutral-800/80 border border-neutral-700/60 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 disabled:opacity-50 transition-colors"
+                />
+                <button
+                  onClick={handleAskSubmit}
+                  disabled={askLoading || !askText.trim()}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all disabled:opacity-40 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 hover:border-emerald-500/50"
+                >
+                  {askLoading ? (
+                    <>
+                      <LoadingSpinner />
+                      <span>Thinking...</span>
+                    </>
+                  ) : (
+                    <>
+                      <SendIcon />
+                      <span>Send</span>
+                    </>
+                  )}
+                </button>
               </div>
             )}
 
             {/* Actions row */}
             <div className="mt-3 flex flex-wrap items-center gap-3 sm:gap-4">
+              {/* Go deeper -- highlighted button */}
               <button
                 onClick={handleExpand}
-                className="text-xs text-neutral-500 hover:text-blue-400 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-blue-600/15 text-blue-400 border border-blue-500/30 hover:bg-blue-600/25 hover:border-blue-500/50 hover:shadow-[0_0_12px_rgba(59,130,246,0.15)]"
               >
+                <DeeperIcon />
                 {isExpanded ? "Collapse" : "Go deeper"}
               </button>
 
+              {/* Ask button */}
               <button
-                onClick={() => speakProbe(probe.text)}
-                disabled={isSpeaking}
-                className={`flex items-center gap-1 text-xs transition-colors ${
-                  isSpeaking
-                    ? "text-blue-400"
-                    : "text-neutral-500 hover:text-neutral-300"
+                onClick={handleAskToggle}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  showAskInput
+                    ? "bg-emerald-600/25 text-emerald-400 border-emerald-500/50"
+                    : "bg-emerald-600/10 text-emerald-400/80 border-emerald-500/20 hover:bg-emerald-600/20 hover:border-emerald-500/40 hover:text-emerald-400"
                 }`}
-                title="Read aloud"
               >
-                <SpeakerIcon />
-                {isSpeaking ? "Speaking..." : "Listen"}
+                <AskIcon />
+                Ask
               </button>
+
+              {/* Star button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleStar?.(probe.id, !probe.starred);
+                }}
+                className={`p-1.5 rounded-md transition-all ${
+                  probe.starred
+                    ? "text-amber-400 hover:text-amber-300"
+                    : "text-neutral-600 hover:text-amber-400 hover:bg-neutral-800"
+                }`}
+                title={probe.starred ? "Unstar this question" : "Star this question"}
+              >
+                <StarIcon filled={!!probe.starred} />
+              </button>
+
+              {/* Probe navigation */}
+              {(hasPrev || hasNext) && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={onPrevProbe}
+                    disabled={!hasPrev}
+                    className="p-1.5 rounded-md transition-all disabled:opacity-25 disabled:cursor-default text-neutral-500 hover:text-white hover:bg-neutral-800"
+                    title="Previous question"
+                  >
+                    <ChevronLeftIcon />
+                  </button>
+                  {probePosition && (
+                    <span className="text-[10px] text-neutral-600 tabular-nums min-w-[2.5rem] text-center">
+                      {probePosition}
+                    </span>
+                  )}
+                  <button
+                    onClick={onNextProbe}
+                    disabled={!hasNext}
+                    className="p-1.5 rounded-md transition-all disabled:opacity-25 disabled:cursor-default text-neutral-500 hover:text-white hover:bg-neutral-800"
+                    title="Next question"
+                  >
+                    <ChevronRightIcon />
+                  </button>
+                </div>
+              )}
 
               <span className="text-xs text-neutral-600">
                 Gap: {Math.round(probe.gapScore * 100)}%
@@ -320,14 +489,6 @@ function ListenIcon() {
   );
 }
 
-function SpeakerIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-    </svg>
-  );
-}
-
 function SpeakerOnIcon() {
   return (
     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -341,6 +502,58 @@ function SpeakerOffIcon() {
     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+    </svg>
+  );
+}
+
+function DeeperIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+    </svg>
+  );
+}
+
+function AskIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+    </svg>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+    </svg>
+  );
+}
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return filled ? (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+    </svg>
+  ) : (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
     </svg>
   );
 }

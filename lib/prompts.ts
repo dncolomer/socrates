@@ -33,3 +33,30 @@ export async function getUserPrompts(): Promise<UserPrompts> {
     return {};
   }
 }
+
+/**
+ * Load user's preferred Ask model from their Supabase profile.
+ * Returns undefined if not set (will use default model).
+ */
+export async function getUserAskModel(): Promise<string | undefined> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return undefined;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("metadata")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.metadata?.ask_model) return undefined;
+
+    return profile.metadata.ask_model as string;
+  } catch {
+    return undefined;
+  }
+}
