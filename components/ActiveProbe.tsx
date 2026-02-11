@@ -195,6 +195,13 @@ export function ActiveProbe({
         }`}
         style={{ transition: "all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)" }}
       >
+        {/* Original topic — always visible */}
+        <div className="mb-3 pb-3 border-b border-neutral-800/60">
+          <p className="text-[11px] sm:text-xs text-amber-400/80 font-medium truncate" title={problem}>
+            {problem}
+          </p>
+        </div>
+
         {/* New question badge */}
         {flashPulse && (
           <div className="flex items-center gap-2 mb-3 animate-probe-badge">
